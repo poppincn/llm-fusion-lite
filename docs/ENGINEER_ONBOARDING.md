@@ -2,7 +2,7 @@
 
 Handover for the era-code engineer bringing LLM Fusion online. Covers the two ways to initialize it and — the important part — connecting API keys for **all** model providers.
 
-> **Fastest path (era-code / production):** publish/consume the `@era-laboratories/llm-fusion` package → `fuse setup` → put keys in `~/.era-fusion/.env` → `fuse doctor` → fix model IDs in `~/.era-fusion/config.json` → `fuse "test"`.
+> **Fastest path (era-code / production):** install the public `@alexander-ollman/llm-fusion` package → `fuse setup` → add provider keys → `fuse doctor` → confirm model IDs → `fuse "test"`. Keys and model config can be done either via files (`~/.era-fusion/.env` + `config.json`) **or** the served dashboard's **Setup** tab (`fuse serve`).
 > **Dev path (contributing to the engine):** clone → `./scripts/install.sh` → same key + config steps.
 
 ---
@@ -11,7 +11,7 @@ Handover for the era-code engineer bringing LLM Fusion online. Covers the two wa
 
 LLM Fusion answers a request by running it across a **panel of multiple models in parallel**, then a judge model synthesizes one best answer and scores how much each model **influenced** it. Those influence scores accumulate into a per-model, per-subject expertise profile that drives future panel selection and judging. Surfaces: a CLI (`fuse`), an OpenAI-compatible server + web UI, and a `/fuse` skill for Claude Code / OpenCode.
 
-Repo: `Alexander-Ollman/llm-fusion` (private). Monorepo (npm workspaces, TypeScript, ESM): `packages/{core,server,cli,web}` + `skills/fuse`. Distributed as one bundled package. No native deps (uses built-in `node:sqlite`).
+Repo: `Alexander-Ollman/llm-fusion` (GitHub repo currently private; the **npm package is public**). Monorepo (npm workspaces, TypeScript, ESM): `packages/{core,server,cli,web}` + `skills/fuse`. Distributed as one bundled package. No native deps (uses built-in `node:sqlite`).
 
 ---
 
@@ -45,7 +45,7 @@ Distributed as a single bundled **public npm package**, **`@alexander-ollman/llm
 git clone git@github.com:Alexander-Ollman/llm-fusion.git && cd llm-fusion
 ./scripts/install.sh
 ```
-`install.sh` is idempotent: `npm install` + build all packages, bundle the web UI into the server, put `fuse`/`fuse-run` launchers on PATH (`~/.local/bin`, override `ERA_FUSION_BIN`), install the `/fuse` skill into Claude Code + OpenCode, and run `fuse doctor`. If `~/.local/bin` isn't on `PATH`, it prints the `export` line to add.
+`install.sh` is idempotent: `npm install` + build all packages, put `fuse`/`fuse-run` launchers on PATH (`~/.local/bin`, override `ERA_FUSION_BIN`), install the `/fuse` skill into Claude Code + OpenCode, and run `fuse doctor`. The dev server serves the web UI straight from `packages/web/dist` (no copy step). If `~/.local/bin` isn't on `PATH`, it prints the `export` line to add.
 
 Either path creates `~/.era-fusion/` on first run: `config.json` (model registry + settings) and `fusion.db` (the learning store).
 
@@ -77,6 +77,7 @@ The engine calls each provider with its **official SDK**, so each needs its own 
   ```
 - **Repo-local `.env`** (dev path): `cp .env.example .env` and fill it (git-ignored).
 - **Shell export** / service environment: `export ANTHROPIC_API_KEY=…` in your profile or the service's env config (preferred for a hosted server).
+- **Dashboard (no file editing):** `fuse serve` → open the UI → **Setup** tab → paste each provider key and Save. This writes `~/.era-fusion/.env` on the server and applies the key live (no restart).
 
 **Precedence:** real environment variables always win; `.env` never overrides an already-set variable. `.env` lookup order: `~/.era-fusion/.env`, then `./.env`. era-code can provision keys through its existing env/config management — just ensure these names land in the environment or `~/.era-fusion/.env`.
 
@@ -96,8 +97,8 @@ The default registry in `~/.era-fusion/config.json` ships **placeholder model st
    - OpenAI: `curl https://api.openai.com/v1/models -H "Authorization: Bearer $OPENAI_API_KEY" | jq '.data[].id'`
    - Google: Google AI Studio model picker, or the Gemini `models.list` endpoint.
    - Anthropic IDs (`claude-opus-4-8`, `claude-sonnet-4-6`, `claude-haiku-4-5`) are correct as shipped.
-2. Edit `~/.era-fusion/config.json` → set each `models[].model` to a real provider string. Keep `id` stable (it's the key in the learning store; changing it resets that model's history).
-3. Tune `autoPanel` (ids eligible for adaptive selection), `defaultJudge`, `classifierModel`, `panelSize`, `explorationRate`.
+2. Set each model's real provider string — either edit `~/.era-fusion/config.json` (`models[].model`) **or** use the dashboard **Setup → Models** editor (add/edit/delete rows, toggle auto-panel, set costs). Keep `id` stable (it's the key in the learning store; changing it resets that model's history).
+3. Tune `autoPanel` (ids eligible for adaptive selection), `defaultJudge`, `classifierModel`, `panelSize`, `explorationRate` — in the file or under **Setup → Settings**.
 
 ```jsonc
 {
@@ -133,8 +134,9 @@ fuse feedback <run-id> up  # optional thumbs-up to bias future selection
 
 Server + UI:
 ```bash
-fuse serve                 # → http://localhost:8787 (chat + Strengths dashboard)
+fuse serve                 # → http://localhost:8787  (Chat · Strengths · Usage · Setup)
 curl -s localhost:8787/health | jq
+fuse usage                 # token + cost totals per provider/model (also the Usage tab)
 ```
 
 OpenAI-compatible endpoint (what agentic tools connect to):
@@ -159,7 +161,8 @@ curl -s localhost:8787/v1/chat/completions -H 'content-type: application/json' \
 - **State:** `~/.era-fusion/config.json` (settings) + `~/.era-fusion/fusion.db` (SQLite learning store: runs, influence scores, feedback). Back these up to preserve learned expertise. Relocate with `ERA_FUSION_HOME`.
 - **Secrets:** never commit keys. `.gitignore` covers `.env`, `.env.*`, `.era-fusion/`, and `release/`. The store persists prompts + answers — treat `fusion.db` as sensitive.
 - **Cost:** a run is ~N× a single call (N = panel size), more on `deep` depth (agentic tool loop). Tune `panelSize`, use `--depth light|standard`, or trim `autoPanel`. Per-run cost estimate prints when model cost metadata is set.
-- **CLI commands:** `fuse` (run), `serve`, `stats [subject]`, `feedback <id> up|down`, `doctor`, `setup`, `config`, `models`. Plus the `fuse-run` bin used by the skill.
+- **CLI commands:** `fuse` (run), `serve`, `stats [subject]`, `usage`, `feedback <id> up|down`, `doctor`, `setup`, `config`, `models`. Plus the `fuse-run` bin used by the skill.
+- **Dashboard API** (for custom integrations): `GET /api/usage`, `GET /api/config`, `PUT /api/config` (edit settings + model registry), `POST /api/keys` (set a provider key), `GET /api/strengths`, `POST /api/feedback`, `POST /api/fuse` (SSE), plus the OpenAI-compatible `/v1/*`.
 
 ---
 
@@ -185,7 +188,8 @@ curl -s localhost:8787/v1/chat/completions -H 'content-type: application/json' \
 - [ ] Keys in `~/.era-fusion/.env` (or the service env); `fuse doctor` shows expected providers and ≥ 2 models available.
 - [ ] `models[].model` strings in `config.json` match real, accessible model IDs (§5).
 - [ ] `fuse "…"` runs a real multi-model fusion; `fuse stats` shows growing data.
-- [ ] `fuse serve` UI loads; `/v1/chat/completions` returns a synthesized answer.
+- [ ] `fuse serve` UI loads (Chat · Strengths · Usage · Setup); `/v1/chat/completions` returns a synthesized answer.
+- [ ] Dashboard **Usage** shows per-provider totals after a run; **Setup** can set a key + add/edit a model.
 - [ ] `/fuse` works inside Claude Code / OpenCode.
 - [ ] (Hosted) decided where the server runs and how keys are provisioned (env, not committed).
 
