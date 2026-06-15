@@ -3,11 +3,18 @@
  * and computes per-model, per-category strengths used to select panels over time.
  * Backed by the built-in node:sqlite (no native deps).
  */
-import { DatabaseSync } from "node:sqlite";
+import { createRequire } from "node:module";
 import { existsSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
+import type { DatabaseSync } from "node:sqlite";
 import { dbPath } from "./config.js";
 import type { FusionResult } from "./types.js";
+
+// Load node:sqlite via createRequire so bundlers (esbuild/tsup) don't rewrite
+// the specifier — they don't yet recognize this newer builtin. The type import
+// above is erased at compile time, so there is no static `node:sqlite` import.
+const nodeRequire = createRequire(import.meta.url);
+const { DatabaseSync: SqliteDatabase } = nodeRequire("node:sqlite") as typeof import("node:sqlite");
 
 export interface ModelStrength {
   modelId: string;
@@ -65,7 +72,7 @@ export class FusionStore {
   constructor(path = dbPath()) {
     const dir = dirname(path);
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-    this.db = new DatabaseSync(path);
+    this.db = new SqliteDatabase(path);
     this.db.exec(SCHEMA);
   }
 

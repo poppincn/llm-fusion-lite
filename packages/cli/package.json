@@ -4,7 +4,8 @@
   "description": "fuse — CLI for Era Fusion. Run multi-model synthesis from the terminal or pipe it into agentic workflows.",
   "type": "module",
   "bin": {
-    "fuse": "./dist/index.js"
+    "fuse": "./dist/index.js",
+    "fuse-run": "./dist/fuse-run.js"
   },
   "files": ["dist"],
   "scripts": {

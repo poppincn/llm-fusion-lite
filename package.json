@@ -19,7 +19,11 @@
     "dev:server": "npm run dev --workspace=@era-fusion/server",
     "dev:web": "npm run dev --workspace=@era-fusion/web",
     "fuse": "node packages/cli/dist/index.js",
+    "pack:release": "bash scripts/build-package.sh",
     "typecheck": "tsc -b"
+  },
+  "devDependencies": {
+    "tsup": "^8.3.0"
   },
   "license": "MIT"
 }

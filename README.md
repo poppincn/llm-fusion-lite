@@ -52,6 +52,10 @@ fuse doctor                   # verify environment
 
 Works out-of-the-box with just an Anthropic key (Opus 4.8 + Sonnet 4.6, judged by Opus 4.8). Add OpenAI / Google keys for true cross-provider fusion. Edit `~/.era-fusion/config.json` to change models, panel size, judge, or the auto-panel.
 
+## Distribution (npm package)
+
+Ships as a single bundled package — `@era-laboratories/llm-fusion` — exposing the `fuse` and `fuse-run` bins with the web UI and `/fuse` skill included (no native deps; Node ≥ 22). Build it with `npm run pack:release` (output in `./release`). After a global install, wire the skill into your harnesses with `fuse setup`. era-code lazily provisions it on demand. See [`docs/PUBLISHING.md`](docs/PUBLISHING.md) for publishing to a private registry and the era-code integration recipe, and [`docs/ENGINEER_ONBOARDING.md`](docs/ENGINEER_ONBOARDING.md) for first-time setup + connecting provider keys.
+
 ## Usage
 
 ### CLI

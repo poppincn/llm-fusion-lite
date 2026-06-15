@@ -1,6 +1,10 @@
 #!/usr/bin/env node
 import { Command } from "commander";
 import { execFileSync } from "node:child_process";
+import { cpSync, existsSync, mkdirSync, copyFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { homedir } from "node:os";
 import chalk from "chalk";
 import {
   fuse,
@@ -282,6 +286,47 @@ program
 function dimUnset(set: boolean): string {
   return set ? "" : chalk.dim(" (unset)");
 }
+
+// ---- setup (install the /fuse skill into harnesses) ----
+function locateSkillsDir(): string | null {
+  const here = dirname(fileURLToPath(import.meta.url));
+  const candidates = [
+    join(here, "..", "skills"), // packaged: <pkg>/dist -> <pkg>/skills
+    join(here, "..", "..", "..", "skills"), // dev: packages/cli/dist -> repo/skills
+  ];
+  return candidates.find((p) => existsSync(join(p, "fuse", "SKILL.md"))) ?? null;
+}
+
+program
+  .command("setup")
+  .description("install the /fuse skill + command into Claude Code and OpenCode")
+  .action(() => {
+    const skills = locateSkillsDir();
+    if (!skills) {
+      log(chalk.red("Could not locate bundled skill assets."));
+      process.exit(1);
+    }
+    const targets = [
+      {
+        label: "Claude Code",
+        skillDir: join(homedir(), ".claude", "skills"),
+        cmdDir: join(homedir(), ".claude", "commands"),
+      },
+      {
+        label: "OpenCode",
+        skillDir: join(process.env.XDG_CONFIG_HOME || join(homedir(), ".config"), "opencode", "skill"),
+        cmdDir: join(process.env.XDG_CONFIG_HOME || join(homedir(), ".config"), "opencode", "command"),
+      },
+    ];
+    for (const t of targets) {
+      mkdirSync(join(t.skillDir, "fuse"), { recursive: true });
+      mkdirSync(t.cmdDir, { recursive: true });
+      cpSync(join(skills, "fuse"), join(t.skillDir, "fuse"), { recursive: true });
+      copyFileSync(join(skills, "commands", "fuse.md"), join(t.cmdDir, "fuse.md"));
+      log(chalk.green(`✓ installed /fuse for ${t.label}`));
+    }
+    log(chalk.dim("\nThe skill calls `fuse-run` (on PATH from this package). Run `fuse doctor` to verify keys.\n"));
+  });
 
 function bar(score: number): string {
   const n = Math.round(score * 5);

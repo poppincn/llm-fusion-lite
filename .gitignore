@@ -10,3 +10,5 @@ dist/
 .era-fusion/
 packages/web/dist/
 packages/server/public/
+# publishable bundle output
+release/
