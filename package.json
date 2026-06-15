@@ -1,0 +1,25 @@
+{
+  "name": "era-fusion",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Fusion-style multi-model synthesis with adaptive, learned model strengths. GUI + CLI + agentic skill.",
+  "type": "module",
+  "workspaces": [
+    "packages/core",
+    "packages/server",
+    "packages/cli",
+    "packages/web"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "npm run build --workspace=@era-fusion/core && npm run build --workspace=@era-fusion/server && npm run build --workspace=@era-fusion/cli && npm run build --workspace=@era-fusion/web",
+    "build:core": "npm run build --workspace=@era-fusion/core",
+    "dev:server": "npm run dev --workspace=@era-fusion/server",
+    "dev:web": "npm run dev --workspace=@era-fusion/web",
+    "fuse": "node packages/cli/dist/index.js",
+    "typecheck": "tsc -b"
+  },
+  "license": "MIT"
+}

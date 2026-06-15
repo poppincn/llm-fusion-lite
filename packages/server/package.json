@@ -1,0 +1,26 @@
+{
+  "name": "@era-fusion/server",
+  "version": "0.1.0",
+  "description": "Era Fusion HTTP server: OpenAI-compatible endpoint, feedback/strengths API, serves the web UI.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "bin": {
+    "era-fusion-server": "./dist/bin.js"
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "node --watch --experimental-strip-types src/bin.ts",
+    "start": "node dist/bin.js",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@era-fusion/core": "*",
+    "@hono/node-server": "^1.13.0",
+    "hono": "^4.6.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.0"
+  }
+}

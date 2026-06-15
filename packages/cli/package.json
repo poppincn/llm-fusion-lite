@@ -1,0 +1,24 @@
+{
+  "name": "@era-fusion/cli",
+  "version": "0.1.0",
+  "description": "fuse — CLI for Era Fusion. Run multi-model synthesis from the terminal or pipe it into agentic workflows.",
+  "type": "module",
+  "bin": {
+    "fuse": "./dist/index.js"
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@era-fusion/core": "*",
+    "@era-fusion/server": "*",
+    "chalk": "^5.3.0",
+    "commander": "^12.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.0"
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "name": "@era-fusion/core",
+  "version": "0.1.0",
+  "description": "Era Fusion engine: provider abstraction, panel dispatch, judge synthesis, adaptive learning.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.70.0",
+    "@google/genai": "^1.30.0",
+    "openai": "^6.10.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.0"
+  }
+}

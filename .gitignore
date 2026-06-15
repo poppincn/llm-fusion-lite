@@ -1,0 +1,12 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+# local fusion data (sqlite store, config)
+.era-fusion/
+packages/web/dist/
+packages/server/public/

@@ -1,0 +1,31 @@
+/** Era Fusion core — public API. */
+export * from "./types.js";
+export {
+  loadConfig,
+  saveConfig,
+  getModel,
+  apiKeyFor,
+  fusionHome,
+  configPath,
+  dbPath,
+  DEFAULT_CONFIG,
+  DEFAULT_MODELS,
+  DEFAULT_CATEGORIES,
+} from "./config.js";
+export type { FusionConfig } from "./config.js";
+export { fuse, availableAutoPanel } from "./fusion.js";
+export type { FuseDeps } from "./fusion.js";
+export { FusionStore } from "./store.js";
+export type { ModelStrength, PanelPick } from "./store.js";
+export { loadEnv } from "./env.js";
+export { classifyPrompt } from "./classify.js";
+export { adjudicate } from "./adjudicate.js";
+export type { Adjudication } from "./adjudicate.js";
+export { resolveJudge, runJudgeAnalysis, runJudgeSynthesis } from "./judge.js";
+export {
+  getProvider,
+  configuredProviders,
+  AnthropicProvider,
+  OpenAIProvider,
+  GoogleProvider,
+} from "./providers/index.js";
