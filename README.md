@@ -54,7 +54,7 @@ Works out-of-the-box with just an Anthropic key (Opus 4.8 + Sonnet 4.6, judged b
 
 ## Distribution (npm package)
 
-Ships as a single bundled package — `@era-laboratories/llm-fusion` — exposing the `fuse` and `fuse-run` bins with the web UI and `/fuse` skill included (no native deps; Node ≥ 22). Build it with `npm run pack:release` (output in `./release`). After a global install, wire the skill into your harnesses with `fuse setup`. era-code lazily provisions it on demand. See [`docs/PUBLISHING.md`](docs/PUBLISHING.md) for publishing to a private registry and the era-code integration recipe, and [`docs/ENGINEER_ONBOARDING.md`](docs/ENGINEER_ONBOARDING.md) for first-time setup + connecting provider keys.
+Ships as a single bundled **public npm package** — `@alexander-ollman/llm-fusion` — exposing the `fuse` and `fuse-run` bins with the web UI and `/fuse` skill included (no native deps; Node ≥ 22). `npm i -g @alexander-ollman/llm-fusion` (or `npx`), then `fuse setup` to wire the skill into your harnesses. era-code lazily provisions it on demand. Build from source with `npm run pack:release` (output in `./release`). See [`docs/PUBLISHING.md`](docs/PUBLISHING.md) for publishing + the era-code integration recipe, and [`docs/ENGINEER_ONBOARDING.md`](docs/ENGINEER_ONBOARDING.md) for first-time setup + connecting provider keys.
 
 ## Usage
 
@@ -70,7 +70,7 @@ fuse feedback <run-id> up                        # teach it which answers were g
 
 ### Web UI
 ```bash
-fuse serve            # → http://localhost:8787  (chat + strengths dashboard)
+fuse serve            # → http://localhost:8787  (chat · strengths · usage · setup)
 # dev: npm run dev:server  &&  npm run dev:web   (Vite proxies /api + /v1)
 ```
 

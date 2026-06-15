@@ -21,7 +21,7 @@ for (const pkg of pkgs) {
 }
 
 const release = {
-  name: "@era-laboratories/llm-fusion",
+  name: "@alexander-ollman/llm-fusion",
   version: root.version ?? "0.1.0",
   description:
     "LLM Fusion — multi-model synthesis with adaptive, learned per-subject model strengths. CLI + OpenAI-compatible server + web UI + /fuse skill.",
@@ -30,8 +30,10 @@ const release = {
   files: ["dist", "public", "skills", "README.md"],
   engines: { node: ">=22" },
   dependencies: Object.fromEntries(Object.entries(dependencies).sort()),
-  publishConfig: { registry: "https://npm.pkg.github.com", access: "restricted" },
+  // Public package on the npm registry, scoped to the author.
+  publishConfig: { access: "public" },
   repository: { type: "git", url: "git+https://github.com/Alexander-Ollman/llm-fusion.git" },
+  keywords: ["llm", "fusion", "multi-model", "ensemble", "ai", "anthropic", "openai", "gemini", "claude-code"],
   license: "MIT",
 };
 

@@ -16,8 +16,15 @@ export type { FusionConfig } from "./config.js";
 export { fuse, availableAutoPanel } from "./fusion.js";
 export type { FuseDeps } from "./fusion.js";
 export { FusionStore } from "./store.js";
-export type { ModelStrength, PanelPick } from "./store.js";
-export { loadEnv } from "./env.js";
+export type {
+  ModelStrength,
+  PanelPick,
+  ProviderUsage,
+  ModelUsage,
+  UsageTotals,
+  UsageReport,
+} from "./store.js";
+export { loadEnv, writeEnvVar, setProviderKey } from "./env.js";
 export { classifyPrompt } from "./classify.js";
 export { adjudicate } from "./adjudicate.js";
 export type { Adjudication } from "./adjudicate.js";

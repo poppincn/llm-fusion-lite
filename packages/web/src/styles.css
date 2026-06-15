@@ -957,6 +957,149 @@ a {
   flex-shrink: 0;
 }
 
+/* ---------- Usage view ---------- */
+
+.banner-ok {
+  background: rgba(74, 222, 128, 0.1);
+  border-color: rgba(74, 222, 128, 0.3);
+  color: var(--pos);
+}
+
+.usage-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.usage-card {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.usage-card-value {
+  font-size: 22px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.usage-card-label {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  color: var(--text-faint);
+}
+
+/* ---------- Setup view ---------- */
+
+.setup-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.text-input {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 7px;
+  padding: 6px 10px;
+  font-size: 13px;
+  font-family: inherit;
+}
+
+.text-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.cell-input {
+  width: 100%;
+  min-width: 90px;
+}
+
+.setup-keys {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.setup-key-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.setup-key-name {
+  font-weight: 600;
+  width: 90px;
+  text-transform: capitalize;
+}
+
+.setup-status-ok {
+  color: var(--pos);
+  font-size: 13px;
+  width: 110px;
+}
+
+.setup-status-off {
+  color: var(--text-faint);
+  font-size: 13px;
+  width: 110px;
+}
+
+.setup-key-input {
+  flex: 1;
+  min-width: 200px;
+}
+
+.setup-note {
+  margin: 12px 0 0;
+  font-size: 12.5px;
+}
+
+.setup-table-scroll {
+  overflow-x: auto;
+}
+
+.setup-models-table {
+  min-width: 720px;
+}
+
+.setup-models-table td,
+.setup-models-table th {
+  vertical-align: middle;
+}
+
+.setup-models-table input[type="checkbox"] {
+  accent-color: var(--accent);
+}
+
+.btn-small {
+  padding: 4px 9px;
+  font-size: 13px;
+}
+
+.setup-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.setup-settings {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px 24px;
+  align-items: center;
+}
+
 /* ---------- Responsive ---------- */
 
 @media (max-width: 640px) {

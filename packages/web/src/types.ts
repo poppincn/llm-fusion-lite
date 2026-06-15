@@ -148,11 +148,17 @@ export interface FuseRequest {
 
 // --- /api/config ---
 
+export type ProviderName = "anthropic" | "openai" | "google";
+
 export interface ConfigModel {
   id: string;
   provider: string;
+  model?: string;
   label: string;
   webSearch?: boolean;
+  costPer1MIn?: number;
+  costPer1MOut?: number;
+  excludeFromAuto?: boolean;
 }
 
 export interface FusionConfig {
@@ -160,10 +166,57 @@ export interface FusionConfig {
   autoPanel: string[];
   available: string[];
   defaultJudge: string;
+  classifierModel: string;
   categories: string[];
   panelSize: number;
   webSearch: boolean;
+  explorationRate: number;
   providers: string[];
+}
+
+/** Partial config accepted by PUT /api/config. */
+export interface ConfigUpdate {
+  models?: ConfigModel[];
+  autoPanel?: string[];
+  defaultJudge?: string;
+  classifierModel?: string;
+  panelSize?: number;
+  webSearch?: boolean;
+  explorationRate?: number;
+  categories?: string[];
+}
+
+// --- /api/usage ---
+
+export interface UsageTotals {
+  runs: number;
+  calls: number;
+  inputTokens: number;
+  outputTokens: number;
+  costUsd: number;
+}
+
+export interface UsageByProvider {
+  provider: string;
+  calls: number;
+  inputTokens: number;
+  outputTokens: number;
+  costUsd: number;
+}
+
+export interface UsageByModel {
+  modelId: string;
+  provider: string;
+  calls: number;
+  inputTokens: number;
+  outputTokens: number;
+  costUsd: number;
+}
+
+export interface Usage {
+  totals: UsageTotals;
+  byProvider: UsageByProvider[];
+  byModel: UsageByModel[];
 }
 
 // --- /api/strengths ---

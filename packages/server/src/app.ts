@@ -6,12 +6,17 @@ import { join, normalize, extname } from "node:path";
 import {
   fuse,
   loadConfig,
+  saveConfig,
+  setProviderKey,
   FusionStore,
   availableAutoPanel,
   configuredProviders,
   type ChatMessage,
+  type FusionConfig,
   type FusionEvent,
   type FusionResult,
+  type ModelSpec,
+  type ProviderName,
 } from "@era-fusion/core";
 
 export interface AppOptions {
@@ -55,6 +60,22 @@ export function createApp(opts: AppOptions = {}): Hono {
   const store = opts.store ?? new FusionStore();
   app.use("/api/*", cors());
   app.use("/v1/*", cors());
+
+  function configResponse() {
+    const config = loadConfig();
+    return {
+      models: config.models,
+      autoPanel: config.autoPanel,
+      available: availableAutoPanel(config),
+      defaultJudge: config.defaultJudge,
+      classifierModel: config.classifierModel,
+      categories: config.categories,
+      panelSize: config.panelSize,
+      webSearch: config.webSearch,
+      explorationRate: config.explorationRate,
+      providers: configuredProviders(),
+    };
+  }
 
   app.get("/health", (c) =>
     c.json({ ok: true, providers: configuredProviders(), panel: availableAutoPanel(loadConfig()) }),
@@ -219,19 +240,38 @@ export function createApp(opts: AppOptions = {}): Hono {
     return c.json({ runs: store.recentRuns(limit) });
   });
 
-  app.get("/api/config", (c) => {
+  app.get("/api/config", (c) => c.json(configResponse()));
+
+  // --- Edit settings + model registry (dashboard "Setup") ---
+  app.put("/api/config", async (c) => {
+    const body = await c.req.json<Partial<FusionConfig>>();
     const config = loadConfig();
-    return c.json({
-      models: config.models,
-      autoPanel: config.autoPanel,
-      available: availableAutoPanel(config),
-      defaultJudge: config.defaultJudge,
-      categories: config.categories,
-      panelSize: config.panelSize,
-      webSearch: config.webSearch,
-      providers: configuredProviders(),
-    });
+    const next: FusionConfig = { ...config };
+    if (Array.isArray(body.models)) next.models = body.models as ModelSpec[];
+    if (Array.isArray(body.autoPanel)) next.autoPanel = body.autoPanel;
+    if (Array.isArray(body.categories)) next.categories = body.categories;
+    if (typeof body.defaultJudge === "string") next.defaultJudge = body.defaultJudge;
+    if (typeof body.classifierModel === "string") next.classifierModel = body.classifierModel;
+    if (typeof body.panelSize === "number") next.panelSize = body.panelSize;
+    if (typeof body.webSearch === "boolean") next.webSearch = body.webSearch;
+    if (typeof body.explorationRate === "number") next.explorationRate = body.explorationRate;
+    saveConfig(next);
+    return c.json({ ok: true, config: configResponse() });
   });
+
+  // --- Set a provider API key (writes ~/.era-fusion/.env + live env) ---
+  app.post("/api/keys", async (c) => {
+    const body = await c.req.json<{ provider: ProviderName; key: string }>();
+    const valid: ProviderName[] = ["anthropic", "openai", "google"];
+    if (!valid.includes(body.provider) || !body.key) {
+      return c.json({ error: "provider (anthropic|openai|google) and key required" }, 400);
+    }
+    setProviderKey(body.provider, body.key.trim());
+    return c.json({ ok: true, providers: configuredProviders() });
+  });
+
+  // --- Provider/model usage totals (dashboard "Usage") ---
+  app.get("/api/usage", (c) => c.json(store.getUsage()));
 
   // --- Static web UI (SPA) ---
   if (opts.publicDir) {

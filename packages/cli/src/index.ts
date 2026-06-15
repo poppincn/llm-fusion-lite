@@ -183,6 +183,54 @@ program
     log("");
   });
 
+// ---- usage ----
+program
+  .command("usage")
+  .description("show total token/cost usage per provider and model")
+  .action(() => {
+    const store = new FusionStore();
+    const u = store.getUsage();
+    store.close();
+    if (u.totals.calls === 0) {
+      log(chalk.dim("No usage yet. Run some fusions first."));
+      return;
+    }
+    const tok = (n: number) => (n >= 1000 ? (n / 1000).toFixed(1) + "k" : String(n));
+    log(chalk.bold("\nUsage totals"));
+    log(
+      chalk.dim(
+        `  ${u.totals.runs} runs · ${u.totals.calls} model calls · ${tok(u.totals.inputTokens)} in / ${tok(
+          u.totals.outputTokens,
+        )} out · ~$${u.totals.costUsd.toFixed(4)}`,
+      ),
+    );
+    log(chalk.bold("\nBy provider"));
+    log(chalk.dim("provider".padEnd(12) + "calls".padEnd(8) + "in".padEnd(9) + "out".padEnd(9) + "cost"));
+    for (const p of u.byProvider) {
+      log(
+        p.provider.padEnd(12) +
+          String(p.calls).padEnd(8) +
+          tok(p.inputTokens).padEnd(9) +
+          tok(p.outputTokens).padEnd(9) +
+          "$" +
+          p.costUsd.toFixed(4),
+      );
+    }
+    log(chalk.bold("\nBy model"));
+    log(chalk.dim("model".padEnd(22) + "calls".padEnd(8) + "in".padEnd(9) + "out".padEnd(9) + "cost"));
+    for (const m of u.byModel) {
+      log(
+        m.modelId.padEnd(22) +
+          String(m.calls).padEnd(8) +
+          tok(m.inputTokens).padEnd(9) +
+          tok(m.outputTokens).padEnd(9) +
+          "$" +
+          m.costUsd.toFixed(4),
+      );
+    }
+    log("");
+  });
+
 // ---- feedback ----
 program
   .command("feedback <runId> <rating> [modelId]")

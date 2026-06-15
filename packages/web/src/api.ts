@@ -2,9 +2,12 @@ import type {
   FuseRequest,
   FusionEvent,
   FusionConfig,
+  ConfigUpdate,
   ModelStrength,
   RunSummary,
   Rating,
+  Usage,
+  ProviderName,
 } from "./types";
 
 /**
@@ -182,4 +185,57 @@ export async function getConfig(): Promise<FusionConfig> {
   const res = await fetch("/api/config");
   if (!res.ok) throw new Error(`Config fetch failed (${res.status})`);
   return (await res.json()) as FusionConfig;
+}
+
+export async function updateConfig(
+  update: ConfigUpdate,
+): Promise<FusionConfig> {
+  const res = await fetch("/api/config", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(update),
+  });
+  if (!res.ok) {
+    let detail = "";
+    try {
+      detail = await res.text();
+    } catch {
+      /* ignore */
+    }
+    throw new Error(
+      `Config update failed (${res.status})${detail ? `: ${detail}` : ""}`,
+    );
+  }
+  const json = (await res.json()) as { ok: true; config: FusionConfig };
+  return json.config;
+}
+
+export async function getUsage(): Promise<Usage> {
+  const res = await fetch("/api/usage");
+  if (!res.ok) throw new Error(`Usage fetch failed (${res.status})`);
+  return (await res.json()) as Usage;
+}
+
+export async function saveKey(
+  provider: ProviderName,
+  key: string,
+): Promise<string[]> {
+  const res = await fetch("/api/keys", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ provider, key }),
+  });
+  if (!res.ok) {
+    let detail = "";
+    try {
+      detail = await res.text();
+    } catch {
+      /* ignore */
+    }
+    throw new Error(
+      `Save key failed (${res.status})${detail ? `: ${detail}` : ""}`,
+    );
+  }
+  const json = (await res.json()) as { ok: true; providers: string[] };
+  return json.providers ?? [];
 }

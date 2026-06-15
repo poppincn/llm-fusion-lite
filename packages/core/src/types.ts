@@ -105,6 +105,16 @@ export interface FusionUsage {
   estCostUsd?: number;
 }
 
+/** Per-call usage line (one per panelist + one for the judge), for accounting. */
+export interface UsageRow {
+  role: "panel" | "judge";
+  modelId: string;
+  provider: ProviderName;
+  inputTokens: number;
+  outputTokens: number;
+  costUsd: number;
+}
+
 export interface FusionResult {
   id: string;
   /** Subject/category the adjudicator assigned (drives per-subject SME). */
@@ -119,6 +129,8 @@ export interface FusionResult {
   webSearch: boolean;
   createdAt: string;
   usage: FusionUsage;
+  /** Per-call usage breakdown (panelists + judge) for the usage dashboard. */
+  usageBreakdown: UsageRow[];
 }
 
 /** Progress events emitted during a fusion run (for CLI/web streaming). */

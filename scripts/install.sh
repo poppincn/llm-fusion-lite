@@ -17,9 +17,9 @@ fi
 echo "==> Building workspace…"
 npm run build
 
-# 2. Bundle the built web UI into the server for production serving
-mkdir -p packages/server/public
-cp -R packages/web/dist/* packages/server/public/ 2>/dev/null || true
+# 2. (Dev) the server serves the web UI straight from packages/web/dist — no copy
+#    needed. The published package bundles its own ./public via scripts/build-package.sh.
+rm -rf packages/server/public
 
 # 3. Launchers on PATH
 mkdir -p "$BIN_DIR"

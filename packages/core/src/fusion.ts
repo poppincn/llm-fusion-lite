@@ -29,6 +29,11 @@ export function availableAutoPanel(config: FusionConfig): string[] {
   });
 }
 
+function costOf(spec: ModelSpec | undefined, inTok: number, outTok: number): number {
+  if (!spec) return 0;
+  return (inTok / 1e6) * (spec.costPer1MIn ?? 0) + (outTok / 1e6) * (spec.costPer1MOut ?? 0);
+}
+
 function estimateCost(panel: PanelResponse[], judge: ModelSpec, judgeOut: number, judgeIn: number, config: FusionConfig): number {
   let cost = 0;
   for (const p of panel) {
@@ -147,6 +152,25 @@ export async function fuse(opts: FuseOptions, deps: FuseDeps = {}): Promise<Fusi
       estCostUsd: estimateCost(panel, judge, judgeOut, judgeIn, config),
     };
 
+    const usageBreakdown = [
+      ...panel.map((p) => ({
+        role: "panel" as const,
+        modelId: p.modelId,
+        provider: p.provider,
+        inputTokens: p.usage?.inputTokens ?? 0,
+        outputTokens: p.usage?.outputTokens ?? 0,
+        costUsd: costOf(getModel(config, p.modelId), p.usage?.inputTokens ?? 0, p.usage?.outputTokens ?? 0),
+      })),
+      {
+        role: "judge" as const,
+        modelId: judge.id,
+        provider: judge.provider,
+        inputTokens: judgeIn,
+        outputTokens: judgeOut,
+        costUsd: costOf(judge, judgeIn, judgeOut),
+      },
+    ];
+
     const result: FusionResult = {
       id: randomUUID(),
       category,
@@ -159,6 +183,7 @@ export async function fuse(opts: FuseOptions, deps: FuseDeps = {}): Promise<Fusi
       webSearch,
       createdAt: new Date().toISOString(),
       usage,
+      usageBreakdown,
     };
 
     // 7. Learn

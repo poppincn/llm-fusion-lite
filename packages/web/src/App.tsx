@@ -3,8 +3,10 @@ import type { FusionConfig } from "./types";
 import { getConfig } from "./api";
 import { ChatView } from "./components/ChatView";
 import { StrengthsView } from "./components/StrengthsView";
+import { UsageView } from "./components/UsageView";
+import { SetupView } from "./components/SetupView";
 
-type Tab = "chat" | "strengths";
+type Tab = "chat" | "strengths" | "usage" | "setup";
 
 export function App() {
   const [tab, setTab] = useState<Tab>("chat");
@@ -57,6 +59,24 @@ export function App() {
           >
             Strengths
           </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === "usage"}
+            className={`tab ${tab === "usage" ? "tab-active" : ""}`}
+            onClick={() => setTab("usage")}
+          >
+            Usage
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === "setup"}
+            className={`tab ${tab === "setup" ? "tab-active" : ""}`}
+            onClick={() => setTab("setup")}
+          >
+            Setup
+          </button>
         </nav>
       </header>
 
@@ -73,11 +93,10 @@ export function App() {
       )}
 
       <main className="app-main">
-        {tab === "chat" ? (
-          <ChatView config={config} />
-        ) : (
-          <StrengthsView config={config} />
-        )}
+        {tab === "chat" && <ChatView config={config} />}
+        {tab === "strengths" && <StrengthsView config={config} />}
+        {tab === "usage" && <UsageView />}
+        {tab === "setup" && <SetupView onConfigChange={setConfig} />}
       </main>
     </div>
   );

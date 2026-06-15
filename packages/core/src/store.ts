@@ -61,10 +61,53 @@ CREATE TABLE IF NOT EXISTS feedback (
   category TEXT NOT NULL,
   created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS usage (
+  run_id TEXT NOT NULL,
+  role TEXT NOT NULL,
+  model_id TEXT NOT NULL,
+  provider TEXT NOT NULL,
+  input_tokens INTEGER NOT NULL,
+  output_tokens INTEGER NOT NULL,
+  cost_usd REAL NOT NULL,
+  created_at TEXT NOT NULL
+);
 CREATE INDEX IF NOT EXISTS idx_contrib_model_cat ON contributions(model_id, category);
 CREATE INDEX IF NOT EXISTS idx_feedback_model_cat ON feedback(model_id, category);
 CREATE INDEX IF NOT EXISTS idx_feedback_run ON feedback(run_id);
+CREATE INDEX IF NOT EXISTS idx_usage_provider ON usage(provider);
+CREATE INDEX IF NOT EXISTS idx_usage_model ON usage(model_id);
 `;
+
+export interface ProviderUsage {
+  provider: string;
+  calls: number;
+  inputTokens: number;
+  outputTokens: number;
+  costUsd: number;
+}
+
+export interface ModelUsage {
+  modelId: string;
+  provider: string;
+  calls: number;
+  inputTokens: number;
+  outputTokens: number;
+  costUsd: number;
+}
+
+export interface UsageTotals {
+  runs: number;
+  calls: number;
+  inputTokens: number;
+  outputTokens: number;
+  costUsd: number;
+}
+
+export interface UsageReport {
+  totals: UsageTotals;
+  byProvider: ProviderUsage[];
+  byModel: ModelUsage[];
+}
 
 export class FusionStore {
   private db: DatabaseSync;
@@ -112,6 +155,87 @@ export class FusionStore {
         result.createdAt,
       );
     }
+
+    const insertUsage = this.db.prepare(
+      `INSERT INTO usage (run_id, role, model_id, provider, input_tokens, output_tokens, cost_usd, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    );
+    for (const u of result.usageBreakdown ?? []) {
+      insertUsage.run(
+        result.id,
+        u.role,
+        u.modelId,
+        u.provider,
+        Math.round(u.inputTokens) || 0,
+        Math.round(u.outputTokens) || 0,
+        u.costUsd || 0,
+        result.createdAt,
+      );
+    }
+  }
+
+  /** Aggregate provider/model usage for the dashboard. */
+  getUsage(): UsageReport {
+    const totalsRow = this.db
+      .prepare(
+        `SELECT COUNT(DISTINCT run_id) AS runs, COUNT(*) AS calls,
+                COALESCE(SUM(input_tokens),0) AS inTok, COALESCE(SUM(output_tokens),0) AS outTok,
+                COALESCE(SUM(cost_usd),0) AS cost
+         FROM usage`,
+      )
+      .get() as { runs: number; calls: number; inTok: number; outTok: number; cost: number };
+
+    const byProvider = (
+      this.db
+        .prepare(
+          `SELECT provider, COUNT(*) AS calls, COALESCE(SUM(input_tokens),0) AS inTok,
+                  COALESCE(SUM(output_tokens),0) AS outTok, COALESCE(SUM(cost_usd),0) AS cost
+           FROM usage GROUP BY provider ORDER BY cost DESC`,
+        )
+        .all() as Array<{ provider: string; calls: number; inTok: number; outTok: number; cost: number }>
+    ).map((r) => ({
+      provider: r.provider,
+      calls: r.calls,
+      inputTokens: r.inTok,
+      outputTokens: r.outTok,
+      costUsd: r.cost,
+    }));
+
+    const byModel = (
+      this.db
+        .prepare(
+          `SELECT model_id, provider, COUNT(*) AS calls, COALESCE(SUM(input_tokens),0) AS inTok,
+                  COALESCE(SUM(output_tokens),0) AS outTok, COALESCE(SUM(cost_usd),0) AS cost
+           FROM usage GROUP BY model_id, provider ORDER BY cost DESC`,
+        )
+        .all() as Array<{
+        model_id: string;
+        provider: string;
+        calls: number;
+        inTok: number;
+        outTok: number;
+        cost: number;
+      }>
+    ).map((r) => ({
+      modelId: r.model_id,
+      provider: r.provider,
+      calls: r.calls,
+      inputTokens: r.inTok,
+      outputTokens: r.outTok,
+      costUsd: r.cost,
+    }));
+
+    return {
+      totals: {
+        runs: totalsRow.runs,
+        calls: totalsRow.calls,
+        inputTokens: totalsRow.inTok,
+        outputTokens: totalsRow.outTok,
+        costUsd: totalsRow.cost,
+      },
+      byProvider,
+      byModel,
+    };
   }
 
   /**
