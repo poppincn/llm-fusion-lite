@@ -10,6 +10,15 @@ export interface ChatMessage {
 export type ProviderName = "anthropic" | "openai" | "google";
 
 /**
+ * How a provider authenticates and is invoked:
+ *  - api          : the provider's official SDK with an API key (default).
+ *  - subscription : the provider's CLI (claude / codex / gemini) run as a
+ *                   subprocess, using the user's logged-in Pro/Max plan — no
+ *                   API key. CLI calls report no token usage (cost shows $0).
+ */
+export type ProviderAuthMode = "api" | "subscription";
+
+/**
  * How deeply each panelist runs, chosen per-request by the adjudicator:
  *  - light    : single completion, no tools
  *  - standard : single completion + native web search

@@ -1,7 +1,7 @@
 /** The fusion engine: classify → select panel → dispatch → judge → learn. */
 import { randomUUID } from "node:crypto";
 import type { FusionConfig } from "./config.js";
-import { apiKeyFor, getModel, loadConfig } from "./config.js";
+import { getModel, loadConfig } from "./config.js";
 import { adjudicate } from "./adjudicate.js";
 import { getProvider } from "./providers/index.js";
 import { resolveJudge, runJudgeAnalysis, runJudgeSynthesis } from "./judge.js";
@@ -21,11 +21,14 @@ function toMessages(prompt: string | ChatMessage[]): ChatMessage[] {
   return prompt;
 }
 
-/** Model ids eligible for auto-selection that have a configured API key. */
+/**
+ * Model ids eligible for auto-selection whose provider is configured —
+ * api-mode (key set) or subscription-mode (CLI on PATH), per the registry.
+ */
 export function availableAutoPanel(config: FusionConfig): string[] {
   return config.autoPanel.filter((id) => {
     const spec = getModel(config, id);
-    return spec && !spec.excludeFromAuto && !!apiKeyFor(spec.provider);
+    return spec && !spec.excludeFromAuto && getProvider(spec.provider).isConfigured();
   });
 }
 
@@ -82,7 +85,7 @@ export async function fuse(opts: FuseOptions, deps: FuseDeps = {}): Promise<Fusi
     if (opts.panel && opts.panel.length) {
       panelIds = opts.panel.filter((id) => {
         const spec = getModel(config, id);
-        return spec && !!apiKeyFor(spec.provider);
+        return spec && getProvider(spec.provider).isConfigured();
       });
       if (!panelIds.length) panelIds = available.slice(0, opts.panelSize ?? config.panelSize);
     } else {

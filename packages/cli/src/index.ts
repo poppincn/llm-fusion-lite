@@ -13,6 +13,9 @@ import {
   loadConfig,
   saveConfig,
   setProviderKey,
+  authModeFor,
+  setProviderAuthMode,
+  apiKeyFor,
   configPath,
   fusionHome,
   FusionStore,
@@ -20,6 +23,7 @@ import {
   configuredProviders,
   type FusionConfig,
   type ProviderName,
+  type ProviderAuthMode,
   type FusionEvent,
 } from "@era-fusion/core";
 
@@ -296,6 +300,81 @@ function onPath(cmd: string): boolean {
   }
 }
 
+/**
+ * Provider → subscription CLI wiring (grounded against the published packages).
+ * Mirrors CLI_SPECS in @era-fusion/core; kept here for the wizard's install +
+ * version flows and the doctor readout (these need bin/pkg + login hints).
+ */
+const PROVIDER_CLI: Record<
+  ProviderName,
+  { bin: string; pkg: string; loginHint: string }
+> = {
+  anthropic: { bin: "claude", pkg: "@anthropic-ai/claude-code", loginHint: "claude /login" },
+  openai: { bin: "codex", pkg: "@openai/codex", loginHint: "codex login" },
+  google: { bin: "gemini", pkg: "@google/gemini-cli", loginHint: "gemini" },
+};
+
+/** npm package powering this CLI — used for the self-version check. */
+const ENGINE_PKG = "@alexander-ollman/llm-fusion";
+
+/** Run `<bin> --version` and return the first semver found, or null. */
+function cliVersion(bin: string): string | null {
+  try {
+    const out = execFileSync(bin, ["--version"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+    const m = out.match(/\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?/);
+    return m ? m[0] : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Latest published version of an npm package, or null on any failure. */
+function latestNpm(pkg: string): string | null {
+  try {
+    const out = execFileSync("npm", ["view", pkg, "version"], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    const v = out.trim();
+    return v || null;
+  } catch {
+    return null;
+  }
+}
+
+/** True if the package is installed as a global npm package. */
+function isNpmGlobal(pkg: string): boolean {
+  try {
+    execFileSync("npm", ["ls", "-g", pkg], { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Install/update a package globally via npm. Returns success. */
+function installNpmGlobal(pkg: string): boolean {
+  try {
+    execFileSync("npm", ["i", "-g", pkg], { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Absolute path of a resolvable command (for "managed outside npm" hints). */
+function whichPath(bin: string): string | null {
+  try {
+    const out = execFileSync(process.platform === "win32" ? "where" : "which", [bin], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    return out.split(/\r?\n/)[0].trim() || null;
+  } catch {
+    return null;
+  }
+}
+
 program
   .command("doctor")
   .description("check environment: provider keys, optional CLIs, and readiness")
@@ -317,10 +396,42 @@ program
         dimUnset(!!(process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY)),
     );
 
-    log(chalk.bold("\nOptional CLIs (fallback backend, no keys needed)"));
+    log(chalk.bold("\nPer-provider auth mode"));
+    const PROV_LABELS: { name: ProviderName; label: string }[] = [
+      { name: "anthropic", label: "Anthropic (Claude)" },
+      { name: "openai", label: "OpenAI (GPT)" },
+      { name: "google", label: "Google (Gemini)" },
+    ];
+    for (const { name, label } of PROV_LABELS) {
+      const mode = authModeFor(name, config);
+      const cli = PROVIDER_CLI[name];
+      if (mode === "subscription") {
+        const present = onPath(cli.bin);
+        const ver = present ? cliVersion(cli.bin) : null;
+        const detail = present
+          ? `${cli.bin}${ver ? ` v${ver}` : ""} present`
+          : `${cli.bin} not found — npm i -g ${cli.pkg}`;
+        log(`  ${opt(present)} ${label.padEnd(20)} ${chalk.dim("subscription")} — ${detail}`);
+      } else {
+        const keyed = !!apiKeyFor(name);
+        log(`  ${opt(keyed)} ${label.padEnd(20)} ${chalk.dim("api")} — ${keyed ? "key set" : "no key"}`);
+      }
+    }
+
+    log(chalk.bold("\nOptional CLIs (subscription / fallback backend, no keys needed)"));
     log(`  ${opt(onPath("codex"))} codex   ${chalk.dim("(GPT panelist)")}`);
     log(`  ${opt(onPath("gemini"))} gemini  ${chalk.dim("(Gemini panelist)")}`);
     log(`  ${opt(onPath("claude"))} claude  ${chalk.dim("(Claude panelist / judge)")}`);
+
+    // Engine self-version check (skip silently if the package isn't published).
+    const engineLatest = latestNpm(ENGINE_PKG);
+    if (engineLatest && engineLatest !== program.version()) {
+      log(chalk.bold("\nEngine"));
+      log(
+        `  ${chalk.yellow("!")} fuse v${program.version()} installed, v${engineLatest} available — ` +
+          `update: ${chalk.cyan(`npm i -g ${ENGINE_PKG}`)}`,
+      );
+    }
 
     log(chalk.bold("\nReadiness"));
     const available = availableAutoPanel(config);
@@ -400,27 +511,126 @@ function bail(): never {
   process.exit(0);
 }
 
+/**
+ * Subscription-mode setup for one provider: ensure its CLI is installed and
+ * (if managed by npm) up to date, then persist the auth mode and print the
+ * exact login command. Never auto-launches an interactive browser login.
+ */
+async function setupSubscription(prov: { name: ProviderName; label: string }): Promise<void> {
+  const cli = PROVIDER_CLI[prov.name];
+
+  if (!cliAvailableOnPath(cli.bin)) {
+    const doInstall = await p.confirm({
+      message: `${cli.bin} not found. Install ${cli.pkg} via \`npm i -g\` now?`,
+      initialValue: true,
+    });
+    if (p.isCancel(doInstall)) bail();
+    if (doInstall) {
+      const s = p.spinner();
+      s.start(`Installing ${cli.pkg}…`);
+      const ok = installNpmGlobal(cli.pkg);
+      s.stop(ok ? `Installed ${cli.pkg}` : `Install failed for ${cli.pkg}`);
+      if (!ok) p.log.warn(`Could not install ${cli.pkg} — install it manually, then re-run setup.`);
+    } else {
+      p.log.warn(`${prov.label} subscription mode won't work until ${cli.bin} is installed.`);
+    }
+  } else {
+    // Installed — offer an update only when npm manages it and versions differ.
+    const installed = cliVersion(cli.bin);
+    const latest = latestNpm(cli.pkg);
+    if (installed && latest && installed !== latest) {
+      if (isNpmGlobal(cli.pkg)) {
+        const doUpdate = await p.confirm({
+          message: `${cli.bin} v${installed} installed, v${latest} available — update?`,
+          initialValue: true,
+        });
+        if (p.isCancel(doUpdate)) bail();
+        if (doUpdate) {
+          const s = p.spinner();
+          s.start(`Updating ${cli.pkg}…`);
+          const ok = installNpmGlobal(cli.pkg);
+          s.stop(ok ? `Updated ${cli.pkg} → v${latest}` : `Update failed for ${cli.pkg}`);
+        }
+      } else {
+        const at = whichPath(cli.bin) ?? cli.bin;
+        p.note(
+          `${cli.bin} v${installed} is managed outside npm at ${at} (v${latest} available) — update there, not via npm.`,
+          "Heads up",
+        );
+      }
+    }
+  }
+
+  setProviderAuthMode(prov.name, "subscription");
+  p.note(
+    `Log in to your ${prov.label} subscription if you haven't:\n  ${chalk.cyan(cli.loginHint)}`,
+    `${prov.label} — subscription mode`,
+  );
+}
+
+/** Local PATH check (mirrors onPath; named for the wizard's readability). */
+function cliAvailableOnPath(bin: string): boolean {
+  return onPath(bin);
+}
+
 async function runSetupWizard(install: boolean): Promise<void> {
   p.intro(chalk.bold("Era Fusion setup"));
 
-  // 1) Provider keys — masked entry, Enter to keep/skip. Written to ~/.era-fusion/.env (0600).
+  // 1) Per-provider auth: API key, subscription (CLI login), or skip.
   for (const prov of SETUP_PROVIDERS) {
     const current =
       process.env[prov.env] || (prov.name === "google" ? process.env.GEMINI_API_KEY : "") || "";
-    const hint = current
-      ? `set (${maskKey(current)}) — Enter to keep`
-      : prov.required
-        ? "required — paste key, or Enter to set later"
-        : "optional — Enter to skip";
-    const value = await p.password({ message: `${prov.label} API key  ${chalk.dim(hint)}` });
-    if (p.isCancel(value)) bail();
-    const v = (value as string).trim();
-    if (v) {
-      const path = setProviderKey(prov.name, v);
-      p.log.success(`${prov.label} key saved → ${path}`);
-    } else if (!current && prov.required) {
-      p.log.warn(`No ${prov.label} key yet — fusion needs at least one provider configured.`);
+    const cli = PROVIDER_CLI[prov.name];
+    const cliPresent = cliAvailableOnPath(cli.bin);
+    const currentMode = authModeFor(prov.name);
+
+    // Preselect the current/likely choice: configured subscription, an existing
+    // key, an available CLI, else skip (or "api" for the required provider).
+    const initial: ProviderAuthMode | "skip" =
+      currentMode === "subscription"
+        ? "subscription"
+        : current
+          ? "api"
+          : cliPresent
+            ? "subscription"
+            : prov.required
+              ? "api"
+              : "skip";
+
+    const keyHint = current ? ` ${chalk.dim(`(key set: ${maskKey(current)})`)}` : "";
+    const cliHint = cliPresent ? ` ${chalk.dim(`(${cli.bin} present)`)}` : "";
+    const choice = await p.select({
+      message: `${prov.label} — how should it authenticate?`,
+      options: [
+        { value: "api", label: `API key${keyHint}` },
+        { value: "subscription", label: `Subscription login (use your Pro/Max plan)${cliHint}` },
+        { value: "skip", label: "Skip" },
+      ],
+      initialValue: initial,
+    });
+    if (p.isCancel(choice)) bail();
+    const mode = choice as ProviderAuthMode | "skip";
+
+    if (mode === "api") {
+      const hint = current
+        ? `set (${maskKey(current)}) — Enter to keep`
+        : prov.required
+          ? "required — paste key, or Enter to set later"
+          : "optional — Enter to skip";
+      const value = await p.password({ message: `${prov.label} API key  ${chalk.dim(hint)}` });
+      if (p.isCancel(value)) bail();
+      const v = (value as string).trim();
+      if (v) {
+        const path = setProviderKey(prov.name, v);
+        p.log.success(`${prov.label} key saved → ${path}`);
+      } else if (!current && prov.required) {
+        p.log.warn(`No ${prov.label} key yet — fusion needs at least one provider configured.`);
+      }
+      setProviderAuthMode(prov.name, "api");
+    } else if (mode === "subscription") {
+      await setupSubscription(prov);
     }
+    // skip → leave existing config untouched.
   }
 
   // 2) Defaults — prefilled from existing config.
@@ -476,6 +686,17 @@ async function runSetupWizard(install: boolean): Promise<void> {
       readinessLine(fresh),
     "Readiness",
   );
+
+  // 5) Engine self-version check (skip silently if unpublished/unreachable).
+  const engineLatest = latestNpm(ENGINE_PKG);
+  if (engineLatest && engineLatest !== program.version()) {
+    p.log.info(
+      `fuse v${program.version()} installed, v${engineLatest} available — update: ${chalk.cyan(
+        `npm i -g ${ENGINE_PKG}`,
+      )}`,
+    );
+  }
+
   p.outro(`Done. Try ${chalk.cyan('fuse "your question"')}  ·  health: ${chalk.cyan("fuse doctor")}`);
 }
 

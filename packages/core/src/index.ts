@@ -5,6 +5,8 @@ export {
   saveConfig,
   getModel,
   apiKeyFor,
+  authModeFor,
+  setProviderAuthMode,
   fusionHome,
   configPath,
   dbPath,

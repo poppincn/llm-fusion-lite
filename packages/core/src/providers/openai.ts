@@ -5,7 +5,8 @@ import type {
   CompletionResult,
   Provider,
 } from "../types.js";
-import { apiKeyFor } from "../config.js";
+import { apiKeyFor, authModeFor } from "../config.js";
+import { cliAvailable, cliComplete } from "./cli.js";
 
 export class OpenAIProvider implements Provider {
   name = "openai" as const;
@@ -13,7 +14,9 @@ export class OpenAIProvider implements Provider {
   private client: OpenAI | null = null;
 
   isConfigured(): boolean {
-    return !!apiKeyFor("openai");
+    return authModeFor(this.name) === "subscription"
+      ? cliAvailable(this.name)
+      : !!apiKeyFor(this.name);
   }
 
   private getClient(): OpenAI {
@@ -27,6 +30,9 @@ export class OpenAIProvider implements Provider {
     modelString: string,
     opts: CompletionOptions,
   ): Promise<CompletionResult> {
+    if (authModeFor(this.name) === "subscription") {
+      return cliComplete(this.name, modelString, opts);
+    }
     const start = Date.now();
     const system = opts.messages
       .filter((m) => m.role === "system")

@@ -27,7 +27,7 @@ fuse-run "<the user's full request>"
 The script prints a marker on its first line telling you which backend ran:
 
 ### `[era-fusion: service]`
-The full Era Fusion engine ran (provider API keys present). What follows on stdout **is the final synthesized answer** — it already incorporates the panel, the influence-weighted judge, and learned subject expertise, and the run was recorded for learning. Present this answer to the user as the result. The trailing `— run <id> …` line carries the run id; tell the user they can rate it with `fuse feedback <id> up|down` to improve future model selection.
+The full Era Fusion engine ran. Each provider is configured for one of two auth modes (chosen in `fuse setup`): **api** (official SDK + API key) or **subscription** (the provider's CLI — `claude` / `codex` / `gemini` — run as a subprocess on the user's Pro/Max plan, no API key). Both modes flow through the same engine — panel selection, two-phase judge, adaptive learning. What follows on stdout **is the final synthesized answer** — it already incorporates the panel, the influence-weighted judge, and learned subject expertise, and the run was recorded for learning. Present this answer to the user as the result. The trailing `— run <id> …` line carries the run id; tell the user they can rate it with `fuse feedback <id> up|down` to improve future model selection.
 
 ### `[era-fusion: cli-fallback]`
 No API keys were configured, so the script fanned the **same prompt** out to whatever model CLIs are installed (`codex`, `gemini`, `claude`) and printed each panelist's raw response in labeled `=== panelist: <name> ===` blocks. **You are now the judge.** Read every panelist block, then:
@@ -40,4 +40,5 @@ Neither provider keys nor model CLIs are available, or the engine isn't installe
 ## Notes
 - The script may take a while on deep requests — the engine scales panelist depth to the scope of the request (light → standard → agentic deep research).
 - Never fabricate panelist outputs. If a backend fails, report what actually happened.
-- First-run setup: `fuse setup` (guided keys + skill install). Health check: `fuse doctor`. Learned strengths: `fuse stats [subject]`.
+- First-run setup: `fuse setup` (per-provider auth choice — API key or subscription login — plus defaults + skill install). Health check: `fuse doctor`. Learned strengths: `fuse stats [subject]`.
+- Subscription (CLI) panelists report no token usage, so cost metrics show $0/unmetered for them. If the judge is a subscription provider, its structured JSON is best-effort — prefer keeping the judge on an api/Anthropic model.

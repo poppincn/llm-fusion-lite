@@ -39,8 +39,24 @@ resolve_fuse() {
   return 1
 }
 
+# Any subscription CLI on PATH also makes the engine worth attempting (a
+# provider may be configured for subscription mode with no API key set).
+clis_present() {
+  have codex || have gemini || have claude
+}
+
 # --- Service backend: full engine + adaptive learning (lazy-provisioned) -----
-if keys_present; then
+# If `fuse` is installed, trust `fuse config` to report readiness — it now counts
+# subscription providers (CLI on PATH) as configured, not just API keys. Only
+# fall back to the keys/CLIs heuristic when deciding whether to lazy-provision
+# via npx (we don't want to pull the package for an empty environment).
+if have fuse; then
+  if ! fuse config 2>/dev/null | grep -q "providers configured: none"; then
+    echo "[era-fusion: service]"
+    fuse "$REQUEST"
+    exit $?
+  fi
+elif keys_present || clis_present; then
   if FUSE_CMD="$(resolve_fuse)"; then
     if ! $FUSE_CMD config 2>/dev/null | grep -q "providers configured: none"; then
       echo "[era-fusion: service]"
@@ -49,7 +65,7 @@ if keys_present; then
     fi
   else
     echo "[era-fusion: unavailable]"
-    echo "Provider keys found, but Era Fusion isn't installed and npx is unavailable."
+    echo "Providers found, but Era Fusion isn't installed and npx is unavailable."
     echo "Install: npm i -g $PKG   (then re-run)."
     exit 1
   fi

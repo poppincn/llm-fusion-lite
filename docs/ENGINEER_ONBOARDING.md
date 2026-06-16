@@ -51,21 +51,26 @@ Either path creates `~/.era-fusion/` on first run: `config.json` (model registry
 
 ---
 
-## 4. Connect provider API keys  ← the important part
+## 4. Configure providers — API key or subscription  ← the important part
 
-The engine calls each provider with its **official SDK**, so each needs its own key.
+Each provider (Anthropic / OpenAI / Google) runs in one of **two auth modes**, chosen per provider in `fuse setup` (or in `~/.era-fusion/config.json` under `providerAuth`). Both modes flow through the **same engine** — panel selection, two-phase judge, adaptive learning — because everything goes through `Provider.complete()`.
 
-| Provider | Env var | Get a key | Powers (default panel) |
-|---|---|---|---|
-| Anthropic | `ANTHROPIC_API_KEY` | https://console.anthropic.com/ → API Keys | Claude Opus 4.8, Sonnet 4.6, Haiku 4.5 (Haiku = classifier/adjudicator); **default judge** |
-| OpenAI | `OPENAI_API_KEY` | https://platform.openai.com/api-keys | GPT panelist (Responses API + hosted web search) |
-| Google | `GOOGLE_API_KEY` (or `GEMINI_API_KEY`) | https://aistudio.google.com/apikey | Gemini panelists (Google Search grounding) |
+- **`api` (default)** — the provider's **official SDK** with an API key. Reports token usage and cost.
+- **`subscription`** — the provider's **CLI run as a subprocess** using your logged-in **Pro/Max plan**, **no API key**. `fuse setup` installs/updates the CLI via `npm i -g` as needed and prints the login command.
 
-**Minimum:** `ANTHROPIC_API_KEY` (runs + learns with an all-Claude panel). Add OpenAI + Google for true cross-provider fusion — the whole point.
+| Provider | api env var | subscription CLI (npm pkg) | subscription login | Powers (default panel) |
+|---|---|---|---|---|
+| Anthropic | `ANTHROPIC_API_KEY` (https://console.anthropic.com/) | `claude` (`@anthropic-ai/claude-code`) | `claude /login` | Claude Opus 4.8, Sonnet 4.6, Haiku 4.5 (Haiku = classifier/adjudicator); **default judge** |
+| OpenAI | `OPENAI_API_KEY` (https://platform.openai.com/api-keys) | `codex` (`@openai/codex`) | `codex login` | GPT panelist (Responses API + hosted web search in api mode) |
+| Google | `GOOGLE_API_KEY` / `GEMINI_API_KEY` (https://aistudio.google.com/apikey) | `gemini` (`@google/gemini-cli`) | `gemini` | Gemini panelists (Google Search grounding in api mode) |
+
+**Minimum:** any one provider configured (api **or** subscription). Add more for true cross-provider fusion — the whole point.
+
+**Subscription-mode limitations:** CLI calls report **no token usage**, so cost metrics show **$0/unmetered** for subscription panelists. If a subscription provider is the **judge**, its structured-JSON judge output is best-effort (CLIs are less reliable at strict JSON) — **keep the judge on an api/Anthropic model** when possible.
 
 ### How to set them (pick one)
 
-- **Easiest — `fuse setup` wizard:** a terminal TUI that prompts for each provider key (masked input), writes them to `~/.era-fusion/.env` (mode `0600`), applies them live, and lets you pick the default judge / panel size / web-search. Re-run anytime to add a key — press Enter to keep an existing one. Use `fuse setup --no-install` to skip the skill copy, or `fuse setup --skill-only` to only (re)install the skill.
+- **Easiest — `fuse setup` wizard:** a terminal TUI that, **per provider**, asks how to authenticate — **API key** (masked input → `~/.era-fusion/.env`, mode `0600`, applied live), **Subscription login** (installs/updates the provider CLI via `npm i -g` and prints the login command), or **Skip** — then lets you pick the default judge / panel size / web-search. Re-run anytime to change a provider's mode or add a key. Use `fuse setup --no-install` to skip the skill copy, or `fuse setup --skill-only` to only (re)install the skill.
 - **Machine-wide `.env`** (works from any directory):
   ```bash
   mkdir -p ~/.era-fusion
@@ -110,7 +115,10 @@ The default registry in `~/.era-fusion/config.json` ships **placeholder model st
   "classifierModel": "claude-haiku-4-5",   // cheap adjudicator (subject + depth)
   "panelSize": 3,
   "webSearch": true,
-  "explorationRate": 0.15
+  "explorationRate": 0.15,
+  // per-provider auth mode; absent provider ⇒ "api". Set "subscription" to use
+  // the provider's CLI (claude/codex/gemini) on your Pro/Max plan, no API key.
+  "providerAuth": { "anthropic": "api", "openai": "subscription" }
 }
 ```
 

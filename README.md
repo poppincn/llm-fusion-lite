@@ -50,7 +50,15 @@ fuse setup                    # guided TUI: paste provider keys + pick defaults
 fuse doctor                   # verify environment
 ```
 
-`fuse setup` is the quickest path: a terminal wizard that takes provider keys (masked, written to `~/.era-fusion/.env`), lets you pick the default judge / panel size / web-search, and installs the `/fuse` skill. Prefer env vars or the dashboard? `export ANTHROPIC_API_KEY=…` (at least one; OpenAI / Google optional) or `fuse serve` → Setup tab work too. Re-run `fuse setup` anytime to add a key — existing keys are kept on Enter; `fuse setup --skill-only` just (re)installs the skill.
+`fuse setup` is the quickest path: a terminal wizard that, **per provider (Anthropic / OpenAI / Google), lets you choose an auth mode** —
+
+- **API key** — the provider's official SDK with a key (masked entry, written to `~/.era-fusion/.env`, mode `0600`).
+- **Subscription login** — call the provider's CLI (`claude` / `codex` / `gemini`) as a subprocess using your logged-in Pro/Max plan, **no API key**. The wizard installs/updates the CLI via `npm i -g` as needed and prints the login command to run (`claude /login` · `codex login` · `gemini`). Both modes feed the full engine (panel selection, two-phase judge, adaptive learning).
+- **Skip** — leave that provider unconfigured.
+
+It then lets you pick the default judge / panel size / web-search and installs the `/fuse` skill. Prefer env vars or the dashboard? `export ANTHROPIC_API_KEY=…` (at least one; OpenAI / Google optional) or `fuse serve` → Setup tab work too. Re-run `fuse setup` anytime to change a provider's mode or add a key; `fuse setup --skill-only` just (re)installs the skill.
+
+> **Subscription-mode limitations:** CLI panelists report no token usage, so cost metrics show **$0/unmetered** for them. If you set a subscription provider as the judge, its structured JSON output is best-effort (CLIs are less reliable at strict JSON) — keep the judge on an api/Anthropic model when possible.
 
 Works out-of-the-box with just an Anthropic key (Opus 4.8 + Sonnet 4.6, judged by Opus 4.8). Add OpenAI / Google keys for true cross-provider fusion. Edit `~/.era-fusion/config.json` to change models, panel size, judge, or the auto-panel.
 
@@ -88,7 +96,7 @@ Every request fans out to the panel and returns one synthesized answer; non-stan
 ```
 /fuse <your request>
 ```
-or just say "run this through fusion". The skill uses the `fuse` engine when keys are set (with learning), and falls back to orchestrating local model CLIs (`codex`, `gemini`, `claude`) when they aren't.
+or just say "run this through fusion". The skill uses the `fuse` engine when any provider is configured — **api** (key set) or **subscription** (provider CLI on PATH via your Pro/Max plan) — with full learning, and falls back to orchestrating local model CLIs (`codex`, `gemini`, `claude`) directly when the engine isn't installed.
 
 ## Adaptive learning
 

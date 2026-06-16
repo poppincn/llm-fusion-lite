@@ -5,7 +5,8 @@ import type {
   CompletionResult,
   Provider,
 } from "../types.js";
-import { apiKeyFor } from "../config.js";
+import { apiKeyFor, authModeFor } from "../config.js";
+import { cliAvailable, cliComplete } from "./cli.js";
 
 /** Split ChatMessages into an Anthropic system string + user/assistant turns. */
 function splitMessages(messages: CompletionOptions["messages"]) {
@@ -25,7 +26,9 @@ export class AnthropicProvider implements Provider {
   private client: Anthropic | null = null;
 
   isConfigured(): boolean {
-    return !!apiKeyFor("anthropic");
+    return authModeFor(this.name) === "subscription"
+      ? cliAvailable(this.name)
+      : !!apiKeyFor(this.name);
   }
 
   private getClient(): Anthropic {
@@ -39,6 +42,9 @@ export class AnthropicProvider implements Provider {
     modelString: string,
     opts: CompletionOptions,
   ): Promise<CompletionResult> {
+    if (authModeFor(this.name) === "subscription") {
+      return cliComplete(this.name, modelString, opts);
+    }
     const start = Date.now();
     const { system, turns } = splitMessages(opts.messages);
     const depth = opts.depth ?? (opts.webSearch ? "standard" : "light");

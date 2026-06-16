@@ -2,7 +2,7 @@
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import type { ModelSpec, ProviderName } from "./types.js";
+import type { ModelSpec, ProviderAuthMode, ProviderName } from "./types.js";
 
 export interface FusionConfig {
   /** All models the engine knows about. */
@@ -21,6 +21,11 @@ export interface FusionConfig {
   explorationRate: number;
   /** Category taxonomy used by the classifier. */
   categories: string[];
+  /**
+   * Per-provider auth mode. Absent provider ⇒ "api" (SDK + key). Set a provider
+   * to "subscription" to call its CLI (claude / codex / gemini) instead.
+   */
+  providerAuth?: Partial<Record<ProviderName, ProviderAuthMode>>;
 }
 
 export const DEFAULT_CATEGORIES = [
@@ -107,6 +112,7 @@ export const DEFAULT_CONFIG: FusionConfig = {
   webSearch: true,
   explorationRate: 0.15,
   categories: DEFAULT_CATEGORIES,
+  providerAuth: {},
 };
 
 export function fusionHome(): string {
@@ -170,4 +176,22 @@ export function apiKeyFor(provider: ProviderName): string | undefined {
     case "google":
       return process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
   }
+}
+
+/** Resolve a provider's auth mode (defaults to "api" when unset). */
+export function authModeFor(
+  provider: ProviderName,
+  config?: FusionConfig,
+): ProviderAuthMode {
+  return (config ?? loadConfig()).providerAuth?.[provider] ?? "api";
+}
+
+/** Persist a provider's auth mode to config.json. */
+export function setProviderAuthMode(
+  provider: ProviderName,
+  mode: ProviderAuthMode,
+): void {
+  const config = loadConfig();
+  const providerAuth = { ...(config.providerAuth ?? {}), [provider]: mode };
+  saveConfig({ ...config, providerAuth });
 }

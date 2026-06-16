@@ -5,7 +5,8 @@ import type {
   CompletionResult,
   Provider,
 } from "../types.js";
-import { apiKeyFor } from "../config.js";
+import { apiKeyFor, authModeFor } from "../config.js";
+import { cliAvailable, cliComplete } from "./cli.js";
 
 export class GoogleProvider implements Provider {
   name = "google" as const;
@@ -13,7 +14,9 @@ export class GoogleProvider implements Provider {
   private client: GoogleGenAI | null = null;
 
   isConfigured(): boolean {
-    return !!apiKeyFor("google");
+    return authModeFor(this.name) === "subscription"
+      ? cliAvailable(this.name)
+      : !!apiKeyFor(this.name);
   }
 
   private getClient(): GoogleGenAI {
@@ -27,6 +30,9 @@ export class GoogleProvider implements Provider {
     modelString: string,
     opts: CompletionOptions,
   ): Promise<CompletionResult> {
+    if (authModeFor(this.name) === "subscription") {
+      return cliComplete(this.name, modelString, opts);
+    }
     const start = Date.now();
     const systemInstruction = opts.messages
       .filter((m) => m.role === "system")
