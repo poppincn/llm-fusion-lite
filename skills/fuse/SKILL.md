@@ -35,9 +35,9 @@ No API keys were configured, so the script fanned the **same prompt** out to wha
 2. Write the single best final answer, grounded in the strongest correct material across panelists. Don't mention the panel or that this is a synthesis unless the user asks — just give an excellent answer.
 
 ### `[era-fusion: unavailable]`
-Neither API keys nor model CLIs are available. Tell the user to run `fuse doctor`, then set `ANTHROPIC_API_KEY` (and optionally `OPENAI_API_KEY` / `GOOGLE_API_KEY`) or install the `codex` / `gemini` CLIs. Offer to answer directly as a single model instead.
+Neither provider keys nor model CLIs are available, or the engine isn't installed and can't be provisioned. Offer to set Era Fusion up for the user: `npm i -g @alexander-ollman/llm-fusion` then `fuse setup` (a guided wizard that takes provider keys and wires the skill). As a stopgap, you may offer to answer directly as a single model instead.
 
 ## Notes
 - The script may take a while on deep requests — the engine scales panelist depth to the scope of the request (light → standard → agentic deep research).
 - Never fabricate panelist outputs. If a backend fails, report what actually happened.
-- Setup / health check: `fuse doctor`. Learned strengths: `fuse stats [subject]`.
+- First-run setup: `fuse setup` (guided keys + skill install). Health check: `fuse doctor`. Learned strengths: `fuse stats [subject]`.

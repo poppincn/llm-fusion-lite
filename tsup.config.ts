@@ -26,6 +26,7 @@ export default defineConfig({
     "@hono/node-server",
     "commander",
     "chalk",
+    "@clack/prompts",
     // newer Node builtin not in esbuild's known list — keep the node: prefix
     "node:sqlite",
   ],

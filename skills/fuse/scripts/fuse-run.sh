@@ -1,9 +1,14 @@
 #!/usr/bin/env bash
 # Era Fusion orchestrator for agentic harnesses (Claude Code / OpenCode).
 # Service-first: use the `fuse` engine when provider keys are configured.
+# Lazy provision: if keys exist but the engine isn't installed, run it on
+# demand via npx (cached after first use).
 # CLI fallback: otherwise fan the same prompt out to available model CLIs and
 # let the host agent synthesize. Prints a backend marker on the first line.
 set -uo pipefail
+
+PKG="@alexander-ollman/llm-fusion"
+ENV_FILE="${ERA_FUSION_HOME:-$HOME/.era-fusion}/.env"
 
 REQUEST="${*:-}"
 if [ -z "$REQUEST" ] && [ ! -t 0 ]; then
@@ -17,12 +22,36 @@ fi
 
 have() { command -v "$1" >/dev/null 2>&1; }
 
-# --- Service backend: full engine + adaptive learning -----------------------
-if have fuse; then
-  if ! fuse config 2>/dev/null | grep -q "providers configured: none"; then
-    echo "[era-fusion: service]"
-    fuse "$REQUEST"
-    exit $?
+# A provider key counts as present if exported, or persisted in ~/.era-fusion/.env.
+keys_present() {
+  for v in ANTHROPIC_API_KEY OPENAI_API_KEY GOOGLE_API_KEY GEMINI_API_KEY; do
+    eval "val=\${$v:-}"
+    [ -n "$val" ] && return 0
+  done
+  [ -f "$ENV_FILE" ] && grep -qE '^[[:space:]]*(ANTHROPIC|OPENAI|GOOGLE|GEMINI)_API_KEY[[:space:]]*=[[:space:]]*[^[:space:]]' "$ENV_FILE" && return 0
+  return 1
+}
+
+# Resolve a runnable `fuse`: prefer PATH, else lazy-provision via npx (cached).
+resolve_fuse() {
+  if have fuse; then echo "fuse"; return 0; fi
+  if have npx; then echo "npx -y $PKG fuse"; return 0; fi
+  return 1
+}
+
+# --- Service backend: full engine + adaptive learning (lazy-provisioned) -----
+if keys_present; then
+  if FUSE_CMD="$(resolve_fuse)"; then
+    if ! $FUSE_CMD config 2>/dev/null | grep -q "providers configured: none"; then
+      echo "[era-fusion: service]"
+      $FUSE_CMD "$REQUEST"
+      exit $?
+    fi
+  else
+    echo "[era-fusion: unavailable]"
+    echo "Provider keys found, but Era Fusion isn't installed and npx is unavailable."
+    echo "Install: npm i -g $PKG   (then re-run)."
+    exit 1
   fi
 fi
 
@@ -35,7 +64,8 @@ have claude && PANELISTS+=("claude")
 if [ "${#PANELISTS[@]}" -eq 0 ]; then
   echo "[era-fusion: unavailable]"
   echo "No provider API keys and no model CLIs (codex/gemini/claude) found."
-  echo "Run 'fuse doctor' for guidance."
+  echo "Set up Era Fusion:  npm i -g $PKG  &&  fuse setup   (guided key entry)"
+  echo "Or run 'fuse doctor' for guidance."
   exit 1
 fi
 

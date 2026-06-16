@@ -6,15 +6,20 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
 import chalk from "chalk";
+import * as p from "@clack/prompts";
 import {
   fuse,
   loadEnv,
   loadConfig,
+  saveConfig,
+  setProviderKey,
   configPath,
   fusionHome,
   FusionStore,
   availableAutoPanel,
   configuredProviders,
+  type FusionConfig,
+  type ProviderName,
   type FusionEvent,
 } from "@era-fusion/core";
 
@@ -335,45 +340,166 @@ function dimUnset(set: boolean): string {
   return set ? "" : chalk.dim(" (unset)");
 }
 
-// ---- setup (install the /fuse skill into harnesses) ----
+// ---- setup (interactive wizard: provider keys + defaults + skill install) ----
 function locateSkillsDir(): string | null {
   const here = dirname(fileURLToPath(import.meta.url));
   const candidates = [
     join(here, "..", "skills"), // packaged: <pkg>/dist -> <pkg>/skills
     join(here, "..", "..", "..", "skills"), // dev: packages/cli/dist -> repo/skills
   ];
-  return candidates.find((p) => existsSync(join(p, "fuse", "SKILL.md"))) ?? null;
+  return candidates.find((dir) => existsSync(join(dir, "fuse", "SKILL.md"))) ?? null;
+}
+
+/** Copy the /fuse skill + command into Claude Code and OpenCode. Returns installed harness labels. */
+function installSkill(): string[] {
+  const skills = locateSkillsDir();
+  if (!skills) throw new Error("Could not locate bundled skill assets.");
+  const targets = [
+    {
+      label: "Claude Code",
+      skillDir: join(homedir(), ".claude", "skills"),
+      cmdDir: join(homedir(), ".claude", "commands"),
+    },
+    {
+      label: "OpenCode",
+      skillDir: join(process.env.XDG_CONFIG_HOME || join(homedir(), ".config"), "opencode", "skill"),
+      cmdDir: join(process.env.XDG_CONFIG_HOME || join(homedir(), ".config"), "opencode", "command"),
+    },
+  ];
+  const installed: string[] = [];
+  for (const t of targets) {
+    mkdirSync(join(t.skillDir, "fuse"), { recursive: true });
+    mkdirSync(t.cmdDir, { recursive: true });
+    cpSync(join(skills, "fuse"), join(t.skillDir, "fuse"), { recursive: true });
+    copyFileSync(join(skills, "commands", "fuse.md"), join(t.cmdDir, "fuse.md"));
+    installed.push(t.label);
+  }
+  return installed;
+}
+
+const SETUP_PROVIDERS: { name: ProviderName; env: string; label: string; required: boolean }[] = [
+  { name: "anthropic", env: "ANTHROPIC_API_KEY", label: "Anthropic (Claude)", required: true },
+  { name: "openai", env: "OPENAI_API_KEY", label: "OpenAI (GPT)", required: false },
+  { name: "google", env: "GOOGLE_API_KEY", label: "Google (Gemini)", required: false },
+];
+
+function maskKey(v: string): string {
+  return v.length <= 8 ? "•".repeat(v.length) : `${v.slice(0, 4)}…${v.slice(-4)}`;
+}
+
+function readinessLine(config: FusionConfig): string {
+  const available = availableAutoPanel(config);
+  if (available.length >= 2) return chalk.green(`✓ ${available.length} models available — full fusion ready`);
+  if (available.length === 1)
+    return chalk.yellow("! only 1 model available — add another provider key for true multi-model fusion");
+  return chalk.red("✗ no providers — set a key with `fuse setup` or export ANTHROPIC_API_KEY");
+}
+
+function bail(): never {
+  p.cancel("Setup cancelled — no changes beyond keys already saved.");
+  process.exit(0);
+}
+
+async function runSetupWizard(install: boolean): Promise<void> {
+  p.intro(chalk.bold("Era Fusion setup"));
+
+  // 1) Provider keys — masked entry, Enter to keep/skip. Written to ~/.era-fusion/.env (0600).
+  for (const prov of SETUP_PROVIDERS) {
+    const current =
+      process.env[prov.env] || (prov.name === "google" ? process.env.GEMINI_API_KEY : "") || "";
+    const hint = current
+      ? `set (${maskKey(current)}) — Enter to keep`
+      : prov.required
+        ? "required — paste key, or Enter to set later"
+        : "optional — Enter to skip";
+    const value = await p.password({ message: `${prov.label} API key  ${chalk.dim(hint)}` });
+    if (p.isCancel(value)) bail();
+    const v = (value as string).trim();
+    if (v) {
+      const path = setProviderKey(prov.name, v);
+      p.log.success(`${prov.label} key saved → ${path}`);
+    } else if (!current && prov.required) {
+      p.log.warn(`No ${prov.label} key yet — fusion needs at least one provider configured.`);
+    }
+  }
+
+  // 2) Defaults — prefilled from existing config.
+  const config = loadConfig(true);
+  const judge = await p.select({
+    message: "Default judge / synthesizer model",
+    options: config.models.map((m) => ({ value: m.id, label: `${m.id}  ${chalk.dim(m.label)}` })),
+    initialValue: config.defaultJudge,
+  });
+  if (p.isCancel(judge)) bail();
+
+  const sizeRaw = await p.text({
+    message: "Panel size (models per fusion)",
+    initialValue: String(config.panelSize),
+    validate: (s) => (s && /^[1-9]\d*$/.test(s.trim()) ? undefined : "enter a positive integer"),
+  });
+  if (p.isCancel(sizeRaw)) bail();
+
+  const web = await p.confirm({ message: "Enable web search by default?", initialValue: config.webSearch });
+  if (p.isCancel(web)) bail();
+
+  saveConfig({
+    ...config,
+    defaultJudge: judge as string,
+    panelSize: parseInt((sizeRaw as string).trim(), 10),
+    webSearch: web as boolean,
+  });
+
+  // 3) Skill install into harnesses.
+  let doInstall = install;
+  if (doInstall) {
+    const ans = await p.confirm({
+      message: "Install the /fuse skill + command into Claude Code & OpenCode?",
+      initialValue: true,
+    });
+    if (p.isCancel(ans)) bail();
+    doInstall = ans as boolean;
+  }
+  if (doInstall) {
+    try {
+      const installed = installSkill();
+      p.log.success(`Installed /fuse for ${installed.join(", ")}`);
+    } catch (e) {
+      p.log.warn(`Skill install skipped: ${(e as Error).message}`);
+    }
+  }
+
+  // 4) Readiness summary.
+  const fresh = loadConfig(true);
+  p.note(
+    `providers: ${configuredProviders().join(", ") || "none"}\n` +
+      `panel:     ${availableAutoPanel(fresh).join(", ") || "none"}\n` +
+      readinessLine(fresh),
+    "Readiness",
+  );
+  p.outro(`Done. Try ${chalk.cyan('fuse "your question"')}  ·  health: ${chalk.cyan("fuse doctor")}`);
 }
 
 program
   .command("setup")
-  .description("install the /fuse skill + command into Claude Code and OpenCode")
-  .action(() => {
-    const skills = locateSkillsDir();
-    if (!skills) {
-      log(chalk.red("Could not locate bundled skill assets."));
-      process.exit(1);
+  .description("interactive setup: provider keys, defaults, and /fuse skill install")
+  .option("--skill-only", "skip the wizard; just install the /fuse skill into harnesses")
+  .option("--no-install", "run the wizard but skip installing the /fuse skill")
+  .action(async (opts) => {
+    const skillOnly = !!opts.skillOnly;
+    // Non-interactive (piped/CI) or --skill-only: copy skill assets, no prompts.
+    if (skillOnly || !process.stdin.isTTY) {
+      if (!skillOnly)
+        log(chalk.yellow("Non-interactive shell — installing the skill only. Run `fuse setup` in a terminal to enter keys."));
+      try {
+        for (const label of installSkill()) log(chalk.green(`✓ installed /fuse for ${label}`));
+        log(chalk.dim("\nThe skill calls `fuse-run` (on PATH from this package). Run `fuse doctor` to verify keys.\n"));
+      } catch (e) {
+        log(chalk.red((e as Error).message));
+        process.exit(1);
+      }
+      return;
     }
-    const targets = [
-      {
-        label: "Claude Code",
-        skillDir: join(homedir(), ".claude", "skills"),
-        cmdDir: join(homedir(), ".claude", "commands"),
-      },
-      {
-        label: "OpenCode",
-        skillDir: join(process.env.XDG_CONFIG_HOME || join(homedir(), ".config"), "opencode", "skill"),
-        cmdDir: join(process.env.XDG_CONFIG_HOME || join(homedir(), ".config"), "opencode", "command"),
-      },
-    ];
-    for (const t of targets) {
-      mkdirSync(join(t.skillDir, "fuse"), { recursive: true });
-      mkdirSync(t.cmdDir, { recursive: true });
-      cpSync(join(skills, "fuse"), join(t.skillDir, "fuse"), { recursive: true });
-      copyFileSync(join(skills, "commands", "fuse.md"), join(t.cmdDir, "fuse.md"));
-      log(chalk.green(`✓ installed /fuse for ${t.label}`));
-    }
-    log(chalk.dim("\nThe skill calls `fuse-run` (on PATH from this package). Run `fuse doctor` to verify keys.\n"));
+    await runSetupWizard(opts.install !== false);
   });
 
 function bar(score: number): string {

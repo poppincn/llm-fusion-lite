@@ -36,7 +36,7 @@ Diversity is **harvested, not manufactured**: the same prompt to different model
 |---|---|
 | `@era-fusion/core` | The engine: provider abstraction (Anthropic / OpenAI / Google SDKs), adjudicator, panel dispatch, two-phase judge, SQLite adaptive store (`node:sqlite`, no native deps). |
 | `@era-fusion/server` | Hono server: OpenAI-compatible `/v1/chat/completions`, rich SSE `/api/fuse`, feedback + strengths API, serves the web UI. |
-| `@era-fusion/cli` | `fuse` — run fusions, `serve`, `stats`, `feedback`, `doctor`, `config`, `models`. Pipe-friendly. |
+| `@era-fusion/cli` | `fuse` — run fusions, `serve`, `setup` (guided key + skill wizard), `stats`, `usage`, `feedback`, `doctor`, `config`, `models`. Pipe-friendly. |
 | `@era-fusion/web` | React chat UI: live panel view, streamed synthesis, analysis panel, feedback, and a learned-strengths dashboard. |
 | `skills/fuse` | The `/fuse` skill for Claude Code / OpenCode (service-first, CLI fallback). |
 
@@ -46,9 +46,11 @@ Diversity is **harvested, not manufactured**: the same prompt to different model
 git clone <this repo> && cd era-fusion
 ./scripts/install.sh          # installs deps, builds, puts `fuse`/`fuse-run` on PATH,
                               # installs the /fuse skill into Claude Code + OpenCode
-export ANTHROPIC_API_KEY=…    # at least one. OPENAI_API_KEY / GOOGLE_API_KEY optional.
+fuse setup                    # guided TUI: paste provider keys + pick defaults
 fuse doctor                   # verify environment
 ```
+
+`fuse setup` is the quickest path: a terminal wizard that takes provider keys (masked, written to `~/.era-fusion/.env`), lets you pick the default judge / panel size / web-search, and installs the `/fuse` skill. Prefer env vars or the dashboard? `export ANTHROPIC_API_KEY=…` (at least one; OpenAI / Google optional) or `fuse serve` → Setup tab work too. Re-run `fuse setup` anytime to add a key — existing keys are kept on Enter; `fuse setup --skill-only` just (re)installs the skill.
 
 Works out-of-the-box with just an Anthropic key (Opus 4.8 + Sonnet 4.6, judged by Opus 4.8). Add OpenAI / Google keys for true cross-provider fusion. Edit `~/.era-fusion/config.json` to change models, panel size, judge, or the auto-panel.
 

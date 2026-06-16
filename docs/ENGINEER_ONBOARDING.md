@@ -32,7 +32,7 @@ Distributed as a single bundled **public npm package**, **`@alexander-ollman/llm
 1. **Install + wire the skill** (what era-code's provision step runs — public, no auth):
    ```bash
    npm install -g @alexander-ollman/llm-fusion   # or `npx @alexander-ollman/llm-fusion doctor`
-   fuse setup                                     # installs /fuse into Claude Code + OpenCode
+   fuse setup                                     # guided TUI: paste keys + defaults, installs /fuse
    fuse doctor                                    # verify keys / CLIs
    ```
    The lazy-provision recipe for era-code (idempotent `provisionFusion()`), and why it must **not** be a hard dependency, are in `docs/PUBLISHING.md`.
@@ -65,7 +65,8 @@ The engine calls each provider with its **official SDK**, so each needs its own 
 
 ### How to set them (pick one)
 
-- **Recommended — machine-wide `.env`** (works from any directory):
+- **Easiest — `fuse setup` wizard:** a terminal TUI that prompts for each provider key (masked input), writes them to `~/.era-fusion/.env` (mode `0600`), applies them live, and lets you pick the default judge / panel size / web-search. Re-run anytime to add a key — press Enter to keep an existing one. Use `fuse setup --no-install` to skip the skill copy, or `fuse setup --skill-only` to only (re)install the skill.
+- **Machine-wide `.env`** (works from any directory):
   ```bash
   mkdir -p ~/.era-fusion
   cat > ~/.era-fusion/.env <<'EOF'
