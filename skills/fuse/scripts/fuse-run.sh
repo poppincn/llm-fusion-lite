@@ -7,7 +7,7 @@
 # let the host agent synthesize. Prints a backend marker on the first line.
 set -uo pipefail
 
-PKG="@alexander-ollman/llm-fusion"
+PKG="@alexanderollman/llm-fusion"
 ENV_FILE="${ERA_FUSION_HOME:-$HOME/.era-fusion}/.env"
 
 REQUEST="${*:-}"

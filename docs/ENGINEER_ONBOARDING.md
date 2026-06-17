@@ -2,7 +2,7 @@
 
 Handover for the era-code engineer bringing LLM Fusion online. Covers the two ways to initialize it and — the important part — connecting API keys for **all** model providers.
 
-> **Fastest path (era-code / production):** install the public `@alexander-ollman/llm-fusion` package → `fuse setup` → add provider keys → `fuse doctor` → confirm model IDs → `fuse "test"`. Keys and model config can be done either via files (`~/.era-fusion/.env` + `config.json`) **or** the served dashboard's **Setup** tab (`fuse serve`).
+> **Fastest path (era-code / production):** install the public `@alexanderollman/llm-fusion` package → `fuse setup` → add provider keys → `fuse doctor` → confirm model IDs → `fuse "test"`. Keys and model config can be done either via files (`~/.era-fusion/.env` + `config.json`) **or** the served dashboard's **Setup** tab (`fuse serve`).
 > **Dev path (contributing to the engine):** clone → `./scripts/install.sh` → same key + config steps.
 
 ---
@@ -27,17 +27,17 @@ Repo: `Alexander-Ollman/llm-fusion` (GitHub repo currently private; the **npm pa
 
 ### Path A — via the package (recommended for era-code / production)
 
-Distributed as a single bundled **public npm package**, **`@alexander-ollman/llm-fusion`**, exposing the `fuse` and `fuse-run` bins with the web UI and `/fuse` skill included. era-code **lazily provisions** it (installs on demand; not a hard dependency).
+Distributed as a single bundled **public npm package**, **`@alexanderollman/llm-fusion`**, exposing the `fuse` and `fuse-run` bins with the web UI and `/fuse` skill included. era-code **lazily provisions** it (installs on demand; not a hard dependency).
 
 1. **Install + wire the skill** (what era-code's provision step runs — public, no auth):
    ```bash
-   npm install -g @alexander-ollman/llm-fusion   # or `npx @alexander-ollman/llm-fusion doctor`
+   npm install -g @alexanderollman/llm-fusion   # or `npx @alexanderollman/llm-fusion doctor`
    fuse setup                                     # guided TUI: paste keys + defaults, installs /fuse
    fuse doctor                                    # verify keys / CLIs
    ```
    The lazy-provision recipe for era-code (idempotent `provisionFusion()`), and why it must **not** be a hard dependency, are in `docs/PUBLISHING.md`.
 
-2. To build + publish the artifact from source: `npm run pack:release` → `./release`, then `npm login` (as `alexander-ollman`) and `cd release && npm publish`. Details in `docs/PUBLISHING.md`.
+2. To build + publish the artifact from source: `npm run pack:release` → `./release`, then `npm login` (as `alexanderollman`) and `cd release && npm publish`. Details in `docs/PUBLISHING.md`.
 
 ### Path B — local dev / contributor
 
@@ -182,7 +182,7 @@ curl -s localhost:8787/v1/chat/completions -H 'content-type: application/json' \
 | `doctor` shows a key ○ despite being set | It's in a `.env` that isn't loaded — use `~/.era-fusion/.env` or `./.env`, or `export` it. Real env wins over `.env`. |
 | "No usable models" / 404 from a provider | `models[].model` doesn't match your access — fix it (§5). |
 | 401 / authentication error | Bad/rotated key, or wrong env var (Google accepts `GOOGLE_API_KEY` or `GEMINI_API_KEY`). |
-| `npm install -g @alexander-ollman/llm-fusion` fails | It's public — no auth to install. If publishing, ensure you're `npm login`'d as the `alexander-ollman` scope owner (`docs/PUBLISHING.md`). |
+| `npm install -g @alexanderollman/llm-fusion` fails | It's public — no auth to install. If publishing, ensure you're `npm login`'d as the `alexanderollman` scope owner (`docs/PUBLISHING.md`). |
 | `node:sqlite` / "Cannot find package 'sqlite'" | Node < 22, or an old bundle — upgrade Node ≥ 22 and rebuild (`npm run pack:release`). |
 | Panelist errors but the run still completes | By design — a failed panelist is reported, gets 0 influence, the judge uses the rest. |
 | No citations on web-searched answers | Provider returned grounding in a shape the extractor didn't match; verify the model supports the hosted web tool. Best-effort + provider-specific. |
@@ -207,7 +207,7 @@ curl -s localhost:8787/v1/chat/completions -H 'content-type: application/json' \
 ## 11. Known gaps / open items
 
 - Non-Anthropic default model IDs are **placeholders** — expect to do §5 (or use the dashboard **Setup** tab) before OpenAI/Google panelists work.
-- Publishing requires `npm login` as the `@alexander-ollman` scope owner; the package is public on install (`docs/PUBLISHING.md`).
+- Publishing requires `npm login` as the `@alexanderollman` scope owner; the package is public on install (`docs/PUBLISHING.md`).
 - Provider citation/usage extraction is best-effort against current SDK response shapes — verify on first live runs.
 - No live API call has been run yet (no keys in the build environment); first run may surface a model-ID or response-shape tweak.
 - Repo has no `.era/memory` governance (constitution/directives) bootstrapped — do that per house rules before substantive changes.

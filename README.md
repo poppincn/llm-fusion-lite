@@ -64,7 +64,7 @@ Works out-of-the-box with just an Anthropic key (Opus 4.8 + Sonnet 4.6, judged b
 
 ## Distribution (npm package)
 
-Ships as a single bundled **public npm package** — `@alexander-ollman/llm-fusion` — exposing the `fuse` and `fuse-run` bins with the web UI and `/fuse` skill included (no native deps; Node ≥ 22). `npm i -g @alexander-ollman/llm-fusion` (or `npx`), then `fuse setup` to wire the skill into your harnesses. era-code lazily provisions it on demand. Build from source with `npm run pack:release` (output in `./release`). See [`docs/PUBLISHING.md`](docs/PUBLISHING.md) for publishing + the era-code integration recipe, and [`docs/ENGINEER_ONBOARDING.md`](docs/ENGINEER_ONBOARDING.md) for first-time setup + connecting provider keys.
+Ships as a single bundled **public npm package** — `@alexanderollman/llm-fusion` — exposing the `fuse` and `fuse-run` bins with the web UI and `/fuse` skill included (no native deps; Node ≥ 22). `npm i -g @alexanderollman/llm-fusion` (or `npx`), then `fuse setup` to wire the skill into your harnesses. era-code lazily provisions it on demand. Build from source with `npm run pack:release` (output in `./release`). See [`docs/PUBLISHING.md`](docs/PUBLISHING.md) for publishing + the era-code integration recipe, and [`docs/ENGINEER_ONBOARDING.md`](docs/ENGINEER_ONBOARDING.md) for first-time setup + connecting provider keys.
 
 ## Usage
 

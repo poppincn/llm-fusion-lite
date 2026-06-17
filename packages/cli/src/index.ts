@@ -315,7 +315,7 @@ const PROVIDER_CLI: Record<
 };
 
 /** npm package powering this CLI — used for the self-version check. */
-const ENGINE_PKG = "@alexander-ollman/llm-fusion";
+const ENGINE_PKG = "@alexanderollman/llm-fusion";
 
 /** Run `<bin> --version` and return the first semver found, or null. */
 function cliVersion(bin: string): string | null {

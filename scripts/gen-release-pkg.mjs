@@ -21,7 +21,7 @@ for (const pkg of pkgs) {
 }
 
 const release = {
-  name: "@alexander-ollman/llm-fusion",
+  name: "@alexanderollman/llm-fusion",
   version: root.version ?? "0.1.0",
   description:
     "LLM Fusion — multi-model synthesis with adaptive, learned per-subject model strengths. CLI + OpenAI-compatible server + web UI + /fuse skill.",
