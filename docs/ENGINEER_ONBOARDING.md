@@ -31,7 +31,7 @@ Distributed as a single bundled **public npm package**, **`@alexanderollman/llm-
 
 1. **Install + wire the skill** (what era-code's provision step runs — public, no auth):
    ```bash
-   npm install -g @alexanderollman/llm-fusion   # or `npx @alexanderollman/llm-fusion doctor`
+   npm install -g @alexanderollman/llm-fusion   # or `npx -p @alexanderollman/llm-fusion fuse doctor`
    fuse setup                                     # guided TUI: paste keys + defaults, installs /fuse
    fuse doctor                                    # verify keys / CLIs
    ```

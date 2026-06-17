@@ -35,7 +35,7 @@ keys_present() {
 # Resolve a runnable `fuse`: prefer PATH, else lazy-provision via npx (cached).
 resolve_fuse() {
   if have fuse; then echo "fuse"; return 0; fi
-  if have npx; then echo "npx -y $PKG fuse"; return 0; fi
+  if have npx; then echo "npx -y -p $PKG fuse"; return 0; fi
   return 1
 }
 

@@ -32,7 +32,7 @@ It's public — **no auth needed to install**:
 ```bash
 npm install -g @alexanderollman/llm-fusion
 # or run without installing:
-npx @alexanderollman/llm-fusion doctor
+npx -p @alexanderollman/llm-fusion fuse doctor
 ```
 
 ### Lazy provisioning recipe for era-code
