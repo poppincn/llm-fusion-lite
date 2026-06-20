@@ -141,9 +141,11 @@ program
       if (!quiet) {
         const totalTok = result.usage.inputTokens + result.usage.outputTokens;
         const cost = result.usage.estCostUsd;
+        const estimated = (result.usageBreakdown ?? []).some((r) => r.estimated);
         const meter =
           totalTok > 0
-            ? `${totalTok} tok` + (cost ? ` · ~$${cost.toFixed(4)}` : "")
+            ? `${estimated ? "~" : ""}${totalTok} tok${estimated ? " (est)" : ""}` +
+              (cost ? ` · ~$${cost.toFixed(4)}` : "")
             : "unmetered (subscription)";
         log(
           chalk.dim(
@@ -236,8 +238,7 @@ program
           String(p.calls).padEnd(8) +
           tok(p.inputTokens).padEnd(9) +
           tok(p.outputTokens).padEnd(9) +
-          "$" +
-          p.costUsd.toFixed(4),
+          (p.estimated ? chalk.dim("unmetered") : "$" + p.costUsd.toFixed(4)),
       );
     }
     log(chalk.bold("\nBy model"));
@@ -248,10 +249,10 @@ program
           String(m.calls).padEnd(8) +
           tok(m.inputTokens).padEnd(9) +
           tok(m.outputTokens).padEnd(9) +
-          "$" +
-          m.costUsd.toFixed(4),
+          (m.estimated ? chalk.dim("unmetered") : "$" + m.costUsd.toFixed(4)),
       );
     }
+    if (u.totals.estimated) log(chalk.dim("\n  tokens for subscription providers are estimated; cost is unmetered (flat plan)."));
     log("");
   });
 

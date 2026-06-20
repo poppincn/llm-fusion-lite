@@ -90,9 +90,11 @@ export function UsageView() {
               </div>
               <div className="usage-card">
                 <span className="usage-card-value">
-                  {fmtCost(totals.costUsd)}
+                  {totals.estimated && totals.costUsd === 0 ? "unmetered" : fmtCost(totals.costUsd)}
                 </span>
-                <span className="usage-card-label">Est. cost</span>
+                <span className="usage-card-label">
+                  Est. cost{totals.estimated ? " (some unmetered)" : ""}
+                </span>
               </div>
             </div>
           )}
@@ -133,7 +135,7 @@ export function UsageView() {
                               />
                             </div>
                             <span className="score-num">
-                              {fmtCost(p.costUsd)}
+                              {p.estimated && p.costUsd === 0 ? "unmetered" : fmtCost(p.costUsd)}
                             </span>
                           </div>
                         </td>
@@ -170,7 +172,9 @@ export function UsageView() {
                         <td className="num">{m.calls.toLocaleString()}</td>
                         <td className="num">{fmtTokens(m.inputTokens)}</td>
                         <td className="num">{fmtTokens(m.outputTokens)}</td>
-                        <td className="num">{fmtCost(m.costUsd)}</td>
+                        <td className="num">
+                          {m.estimated && m.costUsd === 0 ? "unmetered" : fmtCost(m.costUsd)}
+                        </td>
                       </tr>
                     ))}
                   </tbody>

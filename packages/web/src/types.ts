@@ -194,6 +194,7 @@ export interface UsageTotals {
   inputTokens: number;
   outputTokens: number;
   costUsd: number;
+  estimated?: boolean;
 }
 
 export interface UsageByProvider {
@@ -202,6 +203,7 @@ export interface UsageByProvider {
   inputTokens: number;
   outputTokens: number;
   costUsd: number;
+  estimated?: boolean;
 }
 
 export interface UsageByModel {
@@ -211,6 +213,7 @@ export interface UsageByModel {
   inputTokens: number;
   outputTokens: number;
   costUsd: number;
+  estimated?: boolean;
 }
 
 export interface Usage {

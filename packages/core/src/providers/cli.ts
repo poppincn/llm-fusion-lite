@@ -9,6 +9,10 @@
  * judge on an api/Anthropic model when possible.
  */
 import { execFile, execFileSync } from "node:child_process";
+import { readFileSync, unlinkSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { randomUUID } from "node:crypto";
 import type {
   CompletionOptions,
   CompletionResult,
@@ -20,8 +24,14 @@ interface CliSpec {
   bin: string;
   /** npm package that provides the CLI. */
   pkg: string;
-  /** Build the argv (after the bin) that runs a one-shot prompt. */
-  buildArgs(prompt: string): string[];
+  /**
+   * Build the argv (after the bin) that runs a one-shot prompt. `outFile`, when
+   * provided, is a path the CLI should write its final message to (used for CLIs
+   * whose stdout is a noisy transcript rather than just the answer).
+   */
+  buildArgs(prompt: string, outFile?: string): string[];
+  /** When true, cliComplete passes a temp file and reads the answer from it. */
+  usesOutFile?: boolean;
 }
 
 /** Per-provider CLI wiring (grounded against the published packages). */
@@ -32,9 +42,14 @@ export const CLI_SPECS: Record<ProviderName, CliSpec> = {
     buildArgs: (prompt) => ["-p", prompt],
   },
   openai: {
+    // `codex exec` renders a transcript to stdout and the final message can be
+    // missed; `-o <file>` captures exactly the final answer. `--color never`
+    // keeps it clean. (Framing goes to stderr, which we ignore.)
     bin: "codex",
     pkg: "@openai/codex",
-    buildArgs: (prompt) => ["exec", prompt],
+    usesOutFile: true,
+    buildArgs: (prompt, outFile) =>
+      ["exec", "--color", "never", ...(outFile ? ["-o", outFile] : []), prompt],
   },
   google: {
     bin: "gemini",
@@ -42,6 +57,12 @@ export const CLI_SPECS: Record<ProviderName, CliSpec> = {
     buildArgs: (prompt) => ["-p", prompt],
   },
 };
+
+/** Rough token estimate (~4 chars/token) for CLIs that report no usage. */
+export function estimateTokens(text: string): number {
+  if (!text) return 0;
+  return Math.max(1, Math.ceil(text.length / 4));
+}
 
 /** Hard cap on a single CLI subprocess (ms). */
 const CLI_TIMEOUT_MS = 180_000;
@@ -108,8 +129,11 @@ export async function cliComplete(
   opts: CompletionOptions,
 ): Promise<CompletionResult> {
   const start = Date.now();
-  const { bin, buildArgs } = CLI_SPECS[provider];
+  const spec = CLI_SPECS[provider];
+  const { bin } = spec;
   const prompt = foldPrompt(opts.messages);
+  const inputTokensEst = estimateTokens(prompt);
+  const outFile = spec.usesOutFile ? join(tmpdir(), `fuse-${bin}-${randomUUID()}.txt`) : undefined;
 
   const fail = (message: string): CompletionResult => ({
     text: "",
@@ -123,9 +147,16 @@ export async function cliComplete(
   // Subscription CLIs return the whole answer at once (no token stream). Emit it
   // as a single onToken event so streaming consumers (CLI stdout, server SSE,
   // web UI) still receive it — otherwise the answer is produced but never shown.
+  // Token counts are estimated (subscription CLIs report none).
   const ok = (text: string): CompletionResult => {
     if (text) opts.onToken?.(text);
-    return { text, model: modelString, provider, usage: undefined, latencyMs: Date.now() - start };
+    return {
+      text,
+      model: modelString,
+      provider,
+      usage: { inputTokens: inputTokensEst, outputTokens: estimateTokens(text) },
+      latencyMs: Date.now() - start,
+    };
   };
 
   if (opts.signal?.aborted) return fail("aborted before start");
@@ -136,15 +167,31 @@ export async function cliComplete(
       if (settled) return;
       settled = true;
       if (opts.signal) opts.signal.removeEventListener("abort", onAbort);
+      if (outFile) {
+        try {
+          unlinkSync(outFile);
+        } catch {
+          // temp file may not exist
+        }
+      }
       resolve(result);
     };
 
     const child = execFile(
       bin,
-      buildArgs(prompt),
+      spec.buildArgs(prompt, outFile),
       { timeout: CLI_TIMEOUT_MS, maxBuffer: 64 * 1024 * 1024 },
       (err, stdout) => {
-        const text = (stdout ?? "").trim();
+        // Prefer the out-file (just the final message) when used; else stdout.
+        let text = (stdout ?? "").trim();
+        if (outFile) {
+          try {
+            const fromFile = readFileSync(outFile, "utf8").trim();
+            if (fromFile) text = fromFile;
+          } catch {
+            // fall back to stdout
+          }
+        }
         if (err) {
           // Treat any stdout we captured as salvageable only if non-empty and
           // the process still exited cleanly; otherwise surface the error.

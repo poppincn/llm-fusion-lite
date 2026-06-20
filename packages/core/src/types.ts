@@ -122,6 +122,8 @@ export interface UsageRow {
   inputTokens: number;
   outputTokens: number;
   costUsd: number;
+  /** Tokens are estimated (subscription CLIs report none) and cost is unmetered. */
+  estimated?: boolean;
 }
 
 export interface FusionResult {

@@ -1,7 +1,7 @@
 /** The fusion engine: classify → select panel → dispatch → judge → learn. */
 import { randomUUID } from "node:crypto";
 import type { FusionConfig } from "./config.js";
-import { getModel, loadConfig } from "./config.js";
+import { authModeFor, getModel, loadConfig } from "./config.js";
 import { adjudicate } from "./adjudicate.js";
 import { getProvider } from "./providers/index.js";
 import { resolveJudge, runJudgeAnalysis, runJudgeSynthesis } from "./judge.js";
@@ -155,22 +155,31 @@ export async function fuse(opts: FuseOptions, deps: FuseDeps = {}): Promise<Fusi
       estCostUsd: estimateCost(panel, judge, judgeOut, judgeIn, config),
     };
 
+    // Subscription-mode calls report no real usage/cost: tokens are estimated
+    // and cost is unmetered (flat plan), so zero the $ and flag it estimated.
     const usageBreakdown = [
-      ...panel.map((p) => ({
-        role: "panel" as const,
-        modelId: p.modelId,
-        provider: p.provider,
-        inputTokens: p.usage?.inputTokens ?? 0,
-        outputTokens: p.usage?.outputTokens ?? 0,
-        costUsd: costOf(getModel(config, p.modelId), p.usage?.inputTokens ?? 0, p.usage?.outputTokens ?? 0),
-      })),
+      ...panel.map((p) => {
+        const sub = authModeFor(p.provider, config) === "subscription";
+        const inTok = p.usage?.inputTokens ?? 0;
+        const outTok = p.usage?.outputTokens ?? 0;
+        return {
+          role: "panel" as const,
+          modelId: p.modelId,
+          provider: p.provider,
+          inputTokens: inTok,
+          outputTokens: outTok,
+          costUsd: sub ? 0 : costOf(getModel(config, p.modelId), inTok, outTok),
+          estimated: sub,
+        };
+      }),
       {
         role: "judge" as const,
         modelId: judge.id,
         provider: judge.provider,
         inputTokens: judgeIn,
         outputTokens: judgeOut,
-        costUsd: costOf(judge, judgeIn, judgeOut),
+        costUsd: authModeFor(judge.provider, config) === "subscription" ? 0 : costOf(judge, judgeIn, judgeOut),
+        estimated: authModeFor(judge.provider, config) === "subscription",
       },
     ];
 
