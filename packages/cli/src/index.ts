@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { Command } from "commander";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, copyFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -21,6 +21,8 @@ import {
   FusionStore,
   availableAutoPanel,
   configuredProviders,
+  getProvider,
+  getModel,
   type FusionConfig,
   type ProviderName,
   type ProviderAuthMode,
@@ -73,10 +75,14 @@ program
     const store = new FusionStore();
     const quiet = opts.quiet || opts.json;
     let runId = "";
+    let streamedAnswer = false;
 
     const onEvent = (e: FusionEvent) => {
       if (quiet) {
-        if (!opts.json && e.type === "answer_token") process.stdout.write(e.token);
+        if (!opts.json && e.type === "answer_token") {
+          process.stdout.write(e.token);
+          streamedAnswer = true;
+        }
         if (e.type === "done") runId = e.result.id;
         return;
       }
@@ -102,6 +108,7 @@ program
           break;
         case "answer_token":
           process.stdout.write(e.token);
+          streamedAnswer = true;
           break;
         case "done":
           runId = e.result.id;
@@ -124,15 +131,23 @@ program
       );
       if (opts.json) {
         process.stdout.write(JSON.stringify(result, null, 2));
+      } else if (!streamedAnswer) {
+        // Backstop: a non-streaming backend (e.g. a subscription-mode judge)
+        // returns the whole answer at once. Print it so it's never dropped.
+        process.stdout.write(result.finalAnswer + "\n");
       } else {
         process.stdout.write("\n");
       }
       if (!quiet) {
+        const totalTok = result.usage.inputTokens + result.usage.outputTokens;
         const cost = result.usage.estCostUsd;
+        const meter =
+          totalTok > 0
+            ? `${totalTok} tok` + (cost ? ` · ~$${cost.toFixed(4)}` : "")
+            : "unmetered (subscription)";
         log(
           chalk.dim(
-            `\n— run ${runId.slice(0, 8)} · ${result.usage.inputTokens + result.usage.outputTokens} tok` +
-              (cost ? ` · ~$${cost.toFixed(4)}` : "") +
+            `\n— run ${runId.slice(0, 8)} · ${meter}` +
               ` · feedback: fuse feedback ${runId.slice(0, 8)} up|down`,
           ),
         );
@@ -378,7 +393,8 @@ function whichPath(bin: string): string | null {
 program
   .command("doctor")
   .description("check environment: provider keys, optional CLIs, and readiness")
-  .action(() => {
+  .option("--probe", "live-check each available model actually answers (costs a tiny call)")
+  .action(async (opts) => {
     const config = loadConfig();
     const providers = configuredProviders();
     const ok = (b: boolean) => (b ? chalk.green("✓") : chalk.red("✗"));
@@ -444,7 +460,32 @@ program
     } else {
       log(`  ${chalk.red("✗")} no providers. Set ANTHROPIC_API_KEY (and optionally OPENAI/GOOGLE), or install codex/gemini CLIs.`);
     }
-    log(chalk.dim(`\n  providers: ${providers.join(", ") || "none"}   panel: ${available.join(", ") || "none"}\n`));
+    log(chalk.dim(`\n  providers: ${providers.join(", ") || "none"}   panel: ${available.join(", ") || "none"}`));
+
+    if (opts.probe) {
+      log(chalk.bold("\nModel probe (live)"));
+      for (const id of available) {
+        const spec = getModel(config, id);
+        if (!spec) continue;
+        if (authModeFor(spec.provider, config) === "subscription") {
+          log(`  ${opt(true)} ${id.padEnd(20)} ${chalk.dim("subscription CLI — not probed")}`);
+          continue;
+        }
+        try {
+          const res = await getProvider(spec.provider).complete(spec.model, {
+            messages: [{ role: "user", content: "ping" }],
+            maxTokens: 8,
+            depth: "light",
+            webSearch: false,
+          });
+          if (res.error) log(`  ${chalk.red("✗")} ${id.padEnd(20)} ${chalk.red(res.error.slice(0, 80))}`);
+          else log(`  ${ok(true)} ${id.padEnd(20)} ${chalk.dim(`ok (${res.latencyMs}ms)`)}`);
+        } catch (e) {
+          log(`  ${chalk.red("✗")} ${id.padEnd(20)} ${chalk.red((e instanceof Error ? e.message : String(e)).slice(0, 80))}`);
+        }
+      }
+    }
+    log("");
   });
 
 function dimUnset(set: boolean): string {
@@ -511,6 +552,36 @@ function bail(): never {
   process.exit(0);
 }
 
+/** Argv to launch a provider's subscription login, derived from its hint. */
+function loginInvocation(prov: ProviderName): { bin: string; args: string[] } {
+  const cli = PROVIDER_CLI[prov];
+  const parts = cli.loginHint.trim().split(/\s+/);
+  return { bin: cli.bin, args: parts.slice(1) }; // hint starts with the bin name
+}
+
+/**
+ * Best-effort check whether a subscription CLI is already authenticated.
+ * Returns true/false when we can tell, or null when there's no reliable probe.
+ */
+function subscriptionLoggedIn(prov: ProviderName): boolean | null {
+  if (prov === "openai") {
+    try {
+      execFileSync("codex", ["login", "status"], { stdio: "ignore" });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  // claude / gemini have no stable non-interactive probe — let the user decide.
+  return null;
+}
+
+/** Launch an interactive login command, handing over the TTY. Returns success. */
+function runLoginInteractive(bin: string, args: string[]): boolean {
+  const r = spawnSync(bin, args, { stdio: "inherit" });
+  return r.status === 0;
+}
+
 /**
  * Subscription-mode setup for one provider: ensure its CLI is installed and
  * (if managed by npm) up to date, then persist the auth mode and print the
@@ -562,10 +633,46 @@ async function setupSubscription(prov: { name: ProviderName; label: string }): P
   }
 
   setProviderAuthMode(prov.name, "subscription");
-  p.note(
-    `Log in to your ${prov.label} subscription if you haven't:\n  ${chalk.cyan(cli.loginHint)}`,
-    `${prov.label} — subscription mode`,
-  );
+
+  // Can't log in to a CLI that isn't installed — leave the manual hint.
+  if (!cliAvailableOnPath(cli.bin)) {
+    p.note(
+      `Once ${cli.bin} is installed, log in with:\n  ${chalk.cyan(cli.loginHint)}`,
+      `${prov.label} — subscription mode`,
+    );
+    return;
+  }
+
+  const status = subscriptionLoggedIn(prov.name);
+  if (status === true) {
+    p.log.success(`${prov.label}: already signed in.`);
+    return;
+  }
+
+  const runNow = await p.confirm({
+    message:
+      status === false
+        ? `${prov.label} isn't signed in. Run \`${cli.loginHint}\` now?`
+        : `Run \`${cli.loginHint}\` now? (skip if you're already signed in)`,
+    initialValue: status === false,
+  });
+  if (p.isCancel(runNow)) bail();
+
+  if (!runNow) {
+    p.note(`Log in when ready:\n  ${chalk.cyan(cli.loginHint)}`, `${prov.label} — subscription mode`);
+    return;
+  }
+
+  const { bin, args } = loginInvocation(prov.name);
+  p.log.step(`Launching ${chalk.cyan(cli.loginHint)} — complete the login, then return here.`);
+  const ok = runLoginInteractive(bin, args);
+  if (ok) {
+    p.log.success(`${prov.label}: login flow finished.`);
+  } else {
+    p.log.warn(
+      `${prov.label}: login command didn't exit cleanly. Run it manually if needed:  ${chalk.cyan(cli.loginHint)}`,
+    );
+  }
 }
 
 /** Local PATH check (mirrors onPath; named for the wizard's readability). */

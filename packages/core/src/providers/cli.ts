@@ -46,6 +46,25 @@ export const CLI_SPECS: Record<ProviderName, CliSpec> = {
 /** Hard cap on a single CLI subprocess (ms). */
 const CLI_TIMEOUT_MS = 180_000;
 
+/**
+ * Per-binary serialization. Two concurrent subprocesses of the same subscription
+ * CLI (e.g. an Opus and a Sonnet panelist both via `claude`) can contend on the
+ * single logged-in session and one dies. Run same-bin calls one at a time.
+ */
+const binLocks = new Map<string, Promise<void>>(); // at most 3 keys (claude/codex/gemini)
+async function withBinLock<T>(bin: string, fn: () => Promise<T>): Promise<T> {
+  const prev = binLocks.get(bin) ?? Promise.resolve();
+  let release!: () => void;
+  const gate = new Promise<void>((r) => (release = r));
+  binLocks.set(bin, prev.then(() => gate)); // next caller waits for prev, then this gate
+  await prev;
+  try {
+    return await fn();
+  } finally {
+    release();
+  }
+}
+
 /** True if the provider's CLI is resolvable on PATH. */
 export function cliAvailable(provider: ProviderName): boolean {
   const { bin } = CLI_SPECS[provider];
@@ -101,9 +120,17 @@ export async function cliComplete(
     error: message,
   });
 
+  // Subscription CLIs return the whole answer at once (no token stream). Emit it
+  // as a single onToken event so streaming consumers (CLI stdout, server SSE,
+  // web UI) still receive it — otherwise the answer is produced but never shown.
+  const ok = (text: string): CompletionResult => {
+    if (text) opts.onToken?.(text);
+    return { text, model: modelString, provider, usage: undefined, latencyMs: Date.now() - start };
+  };
+
   if (opts.signal?.aborted) return fail("aborted before start");
 
-  return new Promise<CompletionResult>((resolve) => {
+  return withBinLock(bin, () => new Promise<CompletionResult>((resolve) => {
     let settled = false;
     const done = (result: CompletionResult) => {
       if (settled) return;
@@ -122,13 +149,7 @@ export async function cliComplete(
           // Treat any stdout we captured as salvageable only if non-empty and
           // the process still exited cleanly; otherwise surface the error.
           if (text && (err as { code?: number }).code === 0) {
-            done({
-              text,
-              model: modelString,
-              provider,
-              usage: undefined,
-              latencyMs: Date.now() - start,
-            });
+            done(ok(text));
             return;
           }
           done(fail(err.message));
@@ -138,15 +159,17 @@ export async function cliComplete(
           done(fail(`${bin} produced no output`));
           return;
         }
-        done({
-          text,
-          model: modelString,
-          provider,
-          usage: undefined,
-          latencyMs: Date.now() - start,
-        });
+        done(ok(text));
       },
     );
+
+    // Close the child's stdin so CLIs that probe for piped input (e.g. `claude`)
+    // don't block waiting on it and emit a "no stdin data received" warning.
+    try {
+      child.stdin?.end();
+    } catch {
+      // ignore
+    }
 
     const onAbort = () => {
       child.kill();
@@ -155,5 +178,5 @@ export async function cliComplete(
     if (opts.signal) opts.signal.addEventListener("abort", onAbort, { once: true });
 
     child.on("error", (e) => done(fail(e.message)));
-  });
+  }));
 }

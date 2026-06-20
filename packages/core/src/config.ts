@@ -81,18 +81,21 @@ export const DEFAULT_MODELS: ModelSpec[] = [
     label: "GPT-5.5",
     webSearch: true,
   },
+  // Default to broadly-available GA Gemini IDs (gemini-3-* 404 on standard keys).
+  // Bump `model` to a gemini-3 string if your key has access. Run `fuse doctor --probe`
+  // to verify a model actually answers before relying on it.
   {
-    id: "gemini-3-pro",
+    id: "gemini-2.5-pro",
     provider: "google",
-    model: "gemini-3-pro",
-    label: "Gemini 3 Pro",
+    model: "gemini-2.5-pro",
+    label: "Gemini 2.5 Pro",
     webSearch: true,
   },
   {
-    id: "gemini-3-flash",
+    id: "gemini-2.5-flash",
     provider: "google",
-    model: "gemini-3-flash",
-    label: "Gemini 3 Flash",
+    model: "gemini-2.5-flash",
+    label: "Gemini 2.5 Flash",
     webSearch: true,
   },
 ];
@@ -103,8 +106,8 @@ export const DEFAULT_CONFIG: FusionConfig = {
     "claude-opus-4-8",
     "claude-sonnet-4-6",
     "gpt-5.5",
-    "gemini-3-pro",
-    "gemini-3-flash",
+    "gemini-2.5-pro",
+    "gemini-2.5-flash",
   ],
   defaultJudge: "claude-opus-4-8",
   classifierModel: "claude-haiku-4-5",
