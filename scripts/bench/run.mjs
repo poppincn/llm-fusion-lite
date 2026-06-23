@@ -114,7 +114,7 @@ async function runSystem(system, item, config, store, panel) {
   const t0 = Date.now();
   if (system === "fusion") {
     const r = await fuse({ prompt: item.prompt, panel, noLearn: true }, { config, store });
-    return { answer: r.finalAnswer, latencyMs: Date.now() - t0, costUsd: r.usage.estCostUsd ?? 0 };
+    return { answer: r.finalAnswer, latencyMs: Date.now() - t0, costUsd: r.usage.estCostUsd ?? 0, result: r };
   }
   const spec = getModel(config, system);
   if (!spec) return { answer: "", latencyMs: 0, costUsd: 0, error: `unknown model ${system}` };
@@ -177,6 +177,17 @@ async function main() {
       const a = agg[sys];
       a.n++; a.score += score; a.latency += res.latencyMs; a.cost += res.costUsd; if (res.error) a.errors++;
       row.scores[sys] = { score, latencyMs: res.latencyMs, costUsd: res.costUsd, error: res.error ?? null };
+      // Capture fusion internals: per-panelist correctness + judge influence, so
+      // we can see whether the judge weighted the right panelist.
+      if (sys === "fusion" && res.result) {
+        const contrib = Object.fromEntries((res.result.analysis?.contributions ?? []).map((c) => [c.modelId, c.score]));
+        row.fusion = (res.result.panel ?? []).map((p) => ({
+          modelId: p.modelId,
+          influence: contrib[p.modelId] ?? null,
+          correct: item.answer != null ? gradeObjective(p.text, item.answer, item.choices) : null,
+          error: p.error ?? null,
+        }));
+      }
       console.error(`  ${item.id} · ${sys.padEnd(20)} ${(score * 100).toFixed(0).padStart(3)}%  ${res.error ? "ERR " + res.error.slice(0, 40) : ""}`);
     }
     detail.push(row);
@@ -204,8 +215,12 @@ async function main() {
   const baselines = ranked.filter((r) => r.s !== "fusion");
   if (fusionMean != null && baselines.length) {
     const best = baselines[0];
-    const delta = (fusionMean - best.mean) * 100;
-    console.log(`\nfusion vs best single (${best.s}): ${delta >= 0 ? "+" : ""}${delta.toFixed(1)} pts`);
+    const avg = baselines.reduce((a, b) => a + b.mean, 0) / baselines.length;
+    const d = (x) => `${x >= 0 ? "+" : ""}${(x * 100).toFixed(1)} pts`;
+    console.log(`\nfusion vs best single (${best.s}): ${d(fusionMean - best.mean)}`);
+    console.log(`fusion vs avg single:        ${d(fusionMean - avg)}`);
+    const judgeSolo = baselines.find((r) => r.s === judge.id);
+    if (judgeSolo) console.log(`fusion vs judge-model solo (${judge.id}): ${d(fusionMean - judgeSolo.mean)}`);
   }
 
   const out = args.out || `bench-results-${items.length}items.json`;
