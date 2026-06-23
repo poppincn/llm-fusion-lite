@@ -92,10 +92,10 @@ export const DEFAULT_MODELS: ModelSpec[] = [
     webSearch: true,
   },
   {
-    id: "gemini-2.5-flash",
+    id: "gemini-3.5-flash",
     provider: "google",
-    model: "gemini-2.5-flash",
-    label: "Gemini 2.5 Flash",
+    model: "gemini-3.5-flash",
+    label: "Gemini 3.5 Flash",
     webSearch: true,
   },
 ];
@@ -107,7 +107,7 @@ export const DEFAULT_CONFIG: FusionConfig = {
     "claude-sonnet-4-6",
     "gpt-5.5",
     "gemini-2.5-pro",
-    "gemini-2.5-flash",
+    "gemini-3.5-flash",
   ],
   defaultJudge: "claude-opus-4-8",
   classifierModel: "claude-haiku-4-5",

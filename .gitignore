@@ -12,3 +12,5 @@ packages/web/dist/
 packages/server/public/
 # publishable bundle output
 release/
+# benchmark result artifacts
+bench-*.json

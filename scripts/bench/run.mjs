@@ -26,6 +26,7 @@ import {
   getModel,
   getProvider,
   resolveJudge,
+  authModeFor,
   FusionStore,
 } from "../../packages/core/dist/index.js";
 
@@ -122,7 +123,9 @@ async function runSystem(system, item, config, store, panel) {
     depth: "standard",
     webSearch: false,
   });
-  return { answer: res.text, latencyMs: Date.now() - t0, costUsd: costOf(spec, res.usage), error: res.error };
+  // Subscription calls are unmetered (flat plan); only meter API-mode models.
+  const costUsd = authModeFor(spec.provider, config) === "subscription" ? 0 : costOf(spec, res.usage);
+  return { answer: res.text, latencyMs: Date.now() - t0, costUsd, error: res.error };
 }
 
 async function main() {

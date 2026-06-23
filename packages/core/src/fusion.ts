@@ -40,13 +40,17 @@ function costOf(spec: ModelSpec | undefined, inTok: number, outTok: number): num
 function estimateCost(panel: PanelResponse[], judge: ModelSpec, judgeOut: number, judgeIn: number, config: FusionConfig): number {
   let cost = 0;
   for (const p of panel) {
+    // Subscription calls are unmetered (flat plan) — exclude from metered cost.
+    if (authModeFor(p.provider, config) === "subscription") continue;
     const spec = getModel(config, p.modelId);
     if (!spec) continue;
     cost += ((p.usage?.inputTokens ?? 0) / 1e6) * (spec.costPer1MIn ?? 0);
     cost += ((p.usage?.outputTokens ?? 0) / 1e6) * (spec.costPer1MOut ?? 0);
   }
-  cost += (judgeIn / 1e6) * (judge.costPer1MIn ?? 0);
-  cost += (judgeOut / 1e6) * (judge.costPer1MOut ?? 0);
+  if (authModeFor(judge.provider, config) !== "subscription") {
+    cost += (judgeIn / 1e6) * (judge.costPer1MIn ?? 0);
+    cost += (judgeOut / 1e6) * (judge.costPer1MOut ?? 0);
+  }
   return cost;
 }
 
