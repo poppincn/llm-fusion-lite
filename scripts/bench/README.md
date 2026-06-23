@@ -1,0 +1,40 @@
+# Era Fusion benchmark harness
+
+Put real numbers behind "fusion beats frontier": run a dataset through **era-fusion** and through each **single baseline model**, grade every answer, and print a scorecard (mean score, fusion-vs-best delta, latency, cost).
+
+## Run
+
+```bash
+npm run build:core                                   # ensure packages/core/dist is current
+node scripts/bench/run.mjs scripts/bench/sample.jsonl            # all available models + fusion
+node scripts/bench/run.mjs data.jsonl --systems fusion,claude-opus-4-8,gpt-5.5 --limit 20
+node scripts/bench/run.mjs data.jsonl --dry-run                  # validate dataset + systems, no API calls
+```
+
+Flags: `--systems <csv>` (default: `fusion` + every available model) · `--judge <id>` · `--limit <n>` · `--panel <csv>` (force fusion's panel) · `--out <file>`.
+
+Needs provider keys/subscriptions configured (`fuse doctor`). Cost: each item runs once per system, plus an LLM-judge call for judged items — so ≈ `(systems + 1) × items` model calls. Start with `--limit`.
+
+## Dataset format (JSONL)
+
+```jsonc
+// Objective — graded by exact/letter match (free, deterministic):
+{ "id": "q1", "prompt": "…answer with the letter only", "choices": ["…"], "answer": "B" }
+// Judged — graded 0–100 by the judge model against a rubric:
+{ "id": "q2", "prompt": "…", "rubric": "what a correct, complete answer must contain" }
+```
+
+`sample.jsonl` has two of each as a smoke test.
+
+## Plugging in standard benchmarks
+
+- **GPQA-Diamond** (what Fugu reports, 95.5): convert each question to an objective MCQ row (`choices` + `answer` letter). 198 items → objective, deterministic grading.
+- **Humanity's Last Exam / open research (DRACO-style)**: use judged rows with a strong rubric per item; set `--judge` to your most capable model and exclude it from `--systems` to avoid self-grading bias.
+- **SWE-Bench Pro / LiveCodeBench**: these need an *execution* harness (apply patch, run tests) — out of scope for this grader; wire `run.mjs`'s grading step to a runner that executes and checks pass/fail.
+
+## Notes & caveats
+
+- Fusion runs with `noLearn: true` so benchmarking doesn't pollute the adaptive store.
+- **Judge bias:** don't use the same model as both a baseline system and the judge on judged items, or it will favor its own style. Prefer objective datasets for headline numbers; use judged mode for directional signal.
+- Results JSON includes per-item, per-system score/latency/cost for analysis.
+- Subscription models report estimated tokens and unmetered cost (shown as `unmetered`).
