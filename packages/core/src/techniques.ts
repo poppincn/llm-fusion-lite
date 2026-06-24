@@ -201,7 +201,7 @@ export async function verifyAndRevise(
     opts.tools !== false &&
     provider.supportsWebSearch;
   const checkTools = useTools
-    ? " Independently verify any factual, quantitative, or current-events claims using web search and code execution before deciding — do not rely solely on the answer's own reasoning."
+    ? " For any numeric or quantitative claim, RE-DERIVE it yourself by running code — do not trust the answer's arithmetic or reasoning. For factual or current-events claims, check them with web search. Base your verdict on YOUR independent results, not the candidate's own explanation."
     : "";
   // An agentic, tool-using check needs room for tool turns; a tool-free one is cheap.
   const checkMaxTokens = useTools ? 8000 : 600;
