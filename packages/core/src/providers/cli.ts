@@ -118,12 +118,41 @@ function foldPrompt(messages: CompletionOptions["messages"]): string {
   return parts.join("\n\n");
 }
 
+/** Sleep that resolves early if the abort signal fires. */
+function delay(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    const t = setTimeout(resolve, ms);
+    signal?.addEventListener("abort", () => {
+      clearTimeout(t);
+      resolve();
+    }, { once: true });
+  });
+}
+
+/**
+ * Run a provider CLI with one retry on transient failure. Subscription CLIs
+ * occasionally die for non-deterministic reasons (session contention, a flaky
+ * one-shot) — counting that as a wrong/empty answer understates the model both
+ * as a panelist and as a benchmark baseline. A genuine abort is not retried.
+ */
+export async function cliComplete(
+  provider: ProviderName,
+  modelString: string,
+  opts: CompletionOptions,
+): Promise<CompletionResult> {
+  const res = await cliAttempt(provider, modelString, opts);
+  if (!res.error || opts.signal?.aborted || /abort/i.test(res.error)) return res;
+  await delay(750, opts.signal);
+  if (opts.signal?.aborted) return res;
+  return cliAttempt(provider, modelString, opts);
+}
+
 /**
  * Run a provider CLI as a subprocess and return its stdout as the completion.
  * Honors opts.signal (kills the child on abort) and a ~180s timeout. Never
  * throws — failures are returned as a result with an `error` and empty text.
  */
-export async function cliComplete(
+async function cliAttempt(
   provider: ProviderName,
   modelString: string,
   opts: CompletionOptions,

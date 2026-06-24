@@ -213,7 +213,15 @@ export async function fuse(opts: FuseOptions, deps: FuseDeps = {}): Promise<Fusi
     // 5b. Verification + one revision.
     let verification: { passed: boolean; revised: boolean } | undefined;
     if (tech.verify) {
-      const v = await verifyAndRevise(messages, finalAnswer, judge, { maxTokens: synthMaxTokens, signal: opts.signal });
+      const v = await verifyAndRevise(messages, finalAnswer, judge, {
+        depth,
+        webSearch,
+        // Subscription CLIs ignore depth/tool flags, so only promise hosted
+        // tool use to the verifier when the judge runs in api mode.
+        tools: authModeFor(judge.provider, config) === "api",
+        maxTokens: synthMaxTokens,
+        signal: opts.signal,
+      });
       if (v.revised) finalAnswer = v.answer;
       verification = { passed: v.passed, revised: v.revised };
       emit({ type: "verify", passed: v.passed, revised: v.revised });

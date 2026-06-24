@@ -15,7 +15,14 @@
  *   node scripts/bench/run.mjs data.jsonl --systems fusion,claude-opus-4-8,gpt-5.5 --limit 20 --out results.json
  *   node scripts/bench/run.mjs data.jsonl --dry-run            # validate dataset + systems, no API calls
  *
- * Flags: --systems <csv>  --judge <id>  --limit <n>  --panel <csv>  --out <file>  --dry-run
+ * Technique ablation — isolate one technique at a time (each is a full preset):
+ *   node scripts/bench/run.mjs data.jsonl --depth deep \
+ *     --systems fusion,fusion-refine,fusion-pairwise,fusion-sc,fusion-verify,fusion-deep
+ *   Fusion variants: fusion · fusion-deep · fusion-refine · fusion-debate ·
+ *                    fusion-pairwise · fusion-confidence · fusion-sc · fusion-verify
+ *
+ * Flags: --systems <csv>  --judge <id>  --offset <n>  --limit <n>  --panel <csv>
+ *        --depth <light|standard|deep>  --out <file>  --dry-run
  */
 import { readFileSync, writeFileSync } from "node:fs";
 import {
@@ -27,6 +34,7 @@ import {
   getProvider,
   resolveJudge,
   authModeFor,
+  TECHNIQUES_OFF,
   TECHNIQUES_DEEP,
   FusionStore,
 } from "../../packages/core/dist/index.js";
@@ -111,22 +119,56 @@ function costOf(spec, usage) {
   return ((usage.inputTokens ?? 0) / 1e6) * (spec.costPer1MIn ?? 0) + ((usage.outputTokens ?? 0) / 1e6) * (spec.costPer1MOut ?? 0);
 }
 
-async function runSystem(system, item, config, store, panel) {
+/**
+ * Fusion system presets for technique ablation. Each value is a FULL
+ * TechniqueConfig (so it fully determines what runs regardless of the depth
+ * tier), letting us isolate one technique at a time:
+ *   fusion           base pipeline (fan-out → synthesize)
+ *   fusion-deep      everything on
+ *   fusion-refine    MoA refinement only
+ *   fusion-debate    MoA refinement with explicit disagreement resolution
+ *   fusion-pairwise  pairwise ranking → judge weights only
+ *   fusion-confidence panelist self-confidence only
+ *   fusion-sc        self-consistency (2 synthesis samples) only
+ *   fusion-verify    post-synthesis verify+revise only (tool-enabled at --depth deep)
+ * `undefined` means "no override" → the engine's depth-derived default.
+ */
+const FUSION_PRESETS = {
+  fusion: undefined,
+  "fusion-deep": TECHNIQUES_DEEP,
+  "fusion-refine": { ...TECHNIQUES_OFF, refineRounds: 1 },
+  "fusion-debate": { ...TECHNIQUES_OFF, refineRounds: 1, debate: true },
+  "fusion-pairwise": { ...TECHNIQUES_OFF, pairwiseRank: true },
+  "fusion-confidence": { ...TECHNIQUES_OFF, confidence: true },
+  "fusion-sc": { ...TECHNIQUES_OFF, selfConsistency: 2 },
+  "fusion-verify": { ...TECHNIQUES_OFF, verify: true },
+};
+
+async function runSystem(system, item, config, store, panel, depth) {
   const t0 = Date.now();
-  // "fusion" = base pipeline; "fusion-deep" = all techniques on (MoA refine,
-  // debate, pairwise rank, confidence, self-consistency, verify).
-  if (system === "fusion" || system === "fusion-deep") {
-    const techniques = system === "fusion-deep" ? TECHNIQUES_DEEP : undefined;
-    const r = await fuse({ prompt: item.prompt, panel, noLearn: true, techniques }, { config, store });
+  if (system.startsWith("fusion")) {
+    if (!(system in FUSION_PRESETS)) {
+      return { answer: "", latencyMs: 0, costUsd: 0, error: `unknown fusion variant ${system} (try: ${Object.keys(FUSION_PRESETS).join(", ")})` };
+    }
+    const techniques = FUSION_PRESETS[system];
+    const r = await fuse({ prompt: item.prompt, panel, noLearn: true, techniques, depth }, { config, store });
     return { answer: r.finalAnswer, latencyMs: Date.now() - t0, costUsd: r.usage.estCostUsd ?? 0, result: r };
   }
   const spec = getModel(config, system);
   if (!spec) return { answer: "", latencyMs: 0, costUsd: 0, error: `unknown model ${system}` };
-  const res = await getProvider(spec.provider).complete(spec.model, {
+  const provider = getProvider(spec.provider);
+  const callOnce = () => provider.complete(spec.model, {
     messages: [{ role: "user", content: item.prompt }],
     depth: "standard",
     webSearch: false,
   });
+  // One retry on a transient baseline failure (empty/errored) so flaky
+  // subscription-CLI or API hiccups don't get scored as a wrong answer and
+  // understate the model. (Subscription calls also retry once inside the engine.)
+  let res = await callOnce();
+  if ((res.error || !res.text) && !/abort/i.test(res.error || "")) {
+    res = await callOnce();
+  }
   // Subscription calls are unmetered (flat plan); only meter API-mode models.
   const costUsd = authModeFor(spec.provider, config) === "subscription" ? 0 : costOf(spec, res.usage);
   return { answer: res.text, latencyMs: Date.now() - t0, costUsd, error: res.error };
@@ -136,7 +178,7 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
   const datasetPath = args._[0];
   if (!datasetPath) {
-    console.error("usage: node scripts/bench/run.mjs <dataset.jsonl> [--systems csv] [--judge id] [--limit n] [--panel csv] [--out file] [--dry-run]");
+    console.error("usage: node scripts/bench/run.mjs <dataset.jsonl> [--systems csv] [--judge id] [--offset n] [--limit n] [--panel csv] [--depth light|standard|deep] [--out file] [--dry-run]");
     process.exit(1);
   }
   const config = loadConfig();
@@ -149,11 +191,16 @@ async function main() {
     ? String(args.systems).split(",").map((s) => s.trim())
     : ["fusion", ...available];
   const panel = args.panel ? String(args.panel).split(",").map((s) => s.trim()) : undefined;
+  const depth = args.depth ? String(args.depth) : undefined; // force a depth tier for fusion systems (light|standard|deep)
+  if (depth && !["light", "standard", "deep"].includes(depth)) {
+    console.error(`Invalid --depth ${depth} (expected light|standard|deep)`);
+    process.exit(1);
+  }
   const judge = resolveJudge(config, args.judge);
 
   console.error(`Dataset: ${datasetPath} — ${items.length} items`);
   console.error(`Systems: ${systems.join(", ")}`);
-  console.error(`Judge:   ${judge.id}   |  available models: ${available.join(", ") || "none"}\n`);
+  console.error(`Judge:   ${judge.id}   |  available models: ${available.join(", ") || "none"}` + (depth ? `  |  depth=${depth}` : "") + `\n`);
 
   if (args["dry-run"]) {
     const objective = items.filter((i) => i.answer != null).length;
@@ -170,7 +217,7 @@ async function main() {
     for (const sys of systems) {
       let res;
       try {
-        res = await runSystem(sys, item, config, store, panel);
+        res = await runSystem(sys, item, config, store, panel, depth);
       } catch (e) {
         res = { answer: "", latencyMs: 0, costUsd: 0, error: e instanceof Error ? e.message : String(e) };
       }

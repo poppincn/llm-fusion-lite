@@ -10,7 +10,7 @@
 import type { FusionConfig } from "./config.js";
 import { getModel } from "./config.js";
 import { getProvider } from "./providers/index.js";
-import type { ChatMessage, ModelSpec, PanelResponse } from "./types.js";
+import type { ChatMessage, Depth, ModelSpec, PanelResponse } from "./types.js";
 
 function promptText(messages: ChatMessage[]): string {
   return messages.map((m) => `[${m.role}] ${m.content}`).join("\n\n");
@@ -165,21 +165,54 @@ export async function selectConsistent(
 /**
  * Verify the synthesized answer; if the verifier flags real problems, revise
  * once. Returns the (possibly revised) answer plus pass/revise status.
+ *
+ * On the `deep` tier the verifier runs at the run's depth with tools enabled, so
+ * it can independently check factual/quantitative claims via web search + code
+ * execution (where the judge's provider supports it). This is the key lever on
+ * the all-panel-wrong failure mode, where a light, tool-blind verifier rubber-
+ * stamps a confident-but-wrong consensus. Light/standard tiers stay tool-free.
  */
 export async function verifyAndRevise(
   prompt: ChatMessage[],
   finalAnswer: string,
   judge: ModelSpec,
-  opts: { maxTokens?: number; onToken?: (t: string) => void; signal?: AbortSignal },
+  opts: {
+    depth?: Depth;
+    webSearch?: boolean;
+    /**
+     * Whether the judge provider will actually honor hosted tools at `deep`
+     * depth. True for api-mode Anthropic/Google; false for subscription CLIs,
+     * which ignore the depth/webSearch flags entirely. Defaults to true.
+     */
+    tools?: boolean;
+    maxTokens?: number;
+    onToken?: (t: string) => void;
+    signal?: AbortSignal;
+  },
 ): Promise<{ passed: boolean; revised: boolean; answer: string }> {
   const provider = getProvider(judge.provider);
+  const depth = opts.depth ?? "light";
+  // Tools only on the deep tier, only when the run hasn't disabled web search,
+  // only when the judge's provider offers grounding, and only when the caller
+  // confirms the provider will honor hosted tools (api mode, not a CLI).
+  const useTools =
+    depth === "deep" &&
+    opts.webSearch !== false &&
+    opts.tools !== false &&
+    provider.supportsWebSearch;
+  const checkTools = useTools
+    ? " Independently verify any factual, quantitative, or current-events claims using web search and code execution before deciding — do not rely solely on the answer's own reasoning."
+    : "";
+  // An agentic, tool-using check needs room for tool turns; a tool-free one is cheap.
+  const checkMaxTokens = useTools ? 8000 : 600;
+
   const check = await provider.complete(judge.model, {
-    maxTokens: 600,
-    depth: "light",
-    webSearch: false,
+    maxTokens: checkMaxTokens,
+    depth,
+    webSearch: useTools,
     signal: opts.signal,
     messages: [
-      { role: "system", content: `You are a verifier. Check the candidate answer for factual errors, logical flaws, miscalculations, or unsupported claims. Reply ONLY JSON {"verdict":"PASS"|"REVISE","issues":"..."}. PASS if it is sound.` },
+      { role: "system", content: `You are a verifier. Check the candidate answer for factual errors, logical flaws, miscalculations, or unsupported claims.${checkTools} Reply ONLY JSON {"verdict":"PASS"|"REVISE","issues":"..."}. PASS if it is sound.` },
       { role: "user", content: `QUESTION:\n${promptText(prompt)}\n\nCANDIDATE ANSWER:\n${finalAnswer}` },
     ],
   });
@@ -199,12 +232,12 @@ export async function verifyAndRevise(
 
   const rev = await provider.complete(judge.model, {
     maxTokens: opts.maxTokens ?? 8192,
-    depth: "light",
-    webSearch: false,
+    depth,
+    webSearch: useTools,
     signal: opts.signal,
     onToken: opts.onToken,
     messages: [
-      { role: "system", content: `Revise the answer to fix the verifier's issues. Keep what is correct. Output ONLY the corrected final answer.` },
+      { role: "system", content: `Revise the answer to fix the verifier's issues. Keep what is correct.${useTools ? " Use web search and code execution to confirm corrections where helpful." : ""} Output ONLY the corrected final answer.` },
       { role: "user", content: `QUESTION:\n${promptText(prompt)}\n\nPREVIOUS ANSWER:\n${finalAnswer}\n\nVERIFIER ISSUES:\n${issues}\n\nCorrected final answer:` },
     ],
   });
