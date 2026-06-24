@@ -14,3 +14,5 @@ packages/server/public/
 release/
 # benchmark result artifacts
 bench-*.json
+# benchmark datasets (gated/large)
+scripts/bench/data/
