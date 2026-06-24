@@ -27,6 +27,7 @@ import {
   getProvider,
   resolveJudge,
   authModeFor,
+  TECHNIQUES_DEEP,
   FusionStore,
 } from "../../packages/core/dist/index.js";
 
@@ -112,8 +113,11 @@ function costOf(spec, usage) {
 
 async function runSystem(system, item, config, store, panel) {
   const t0 = Date.now();
-  if (system === "fusion") {
-    const r = await fuse({ prompt: item.prompt, panel, noLearn: true }, { config, store });
+  // "fusion" = base pipeline; "fusion-deep" = all techniques on (MoA refine,
+  // debate, pairwise rank, confidence, self-consistency, verify).
+  if (system === "fusion" || system === "fusion-deep") {
+    const techniques = system === "fusion-deep" ? TECHNIQUES_DEEP : undefined;
+    const r = await fuse({ prompt: item.prompt, panel, noLearn: true, techniques }, { config, store });
     return { answer: r.finalAnswer, latencyMs: Date.now() - t0, costUsd: r.usage.estCostUsd ?? 0, result: r };
   }
   const spec = getModel(config, system);
@@ -137,6 +141,7 @@ async function main() {
   }
   const config = loadConfig();
   let items = readJsonl(datasetPath);
+  if (args.offset) items = items.slice(parseInt(args.offset, 10));
   if (args.limit) items = items.slice(0, parseInt(args.limit, 10));
 
   const available = availableAutoPanel(config);
@@ -179,7 +184,7 @@ async function main() {
       row.scores[sys] = { score, latencyMs: res.latencyMs, costUsd: res.costUsd, error: res.error ?? null };
       // Capture fusion internals: per-panelist correctness + judge influence, so
       // we can see whether the judge weighted the right panelist.
-      if (sys === "fusion" && res.result) {
+      if (sys.startsWith("fusion") && res.result) {
         const contrib = Object.fromEntries((res.result.analysis?.contributions ?? []).map((c) => [c.modelId, c.score]));
         row.fusion = (res.result.panel ?? []).map((p) => ({
           modelId: p.modelId,
@@ -211,16 +216,17 @@ async function main() {
   }
 
   // Did fusion beat the best single model?
-  const fusionMean = agg.fusion ? agg.fusion.score / Math.max(1, agg.fusion.n) : null;
-  const baselines = ranked.filter((r) => r.s !== "fusion");
-  if (fusionMean != null && baselines.length) {
-    const best = baselines[0];
-    const avg = baselines.reduce((a, b) => a + b.mean, 0) / baselines.length;
+  const singles = ranked.filter((r) => !r.s.startsWith("fusion"));
+  const fusionVariants = ranked.filter((r) => r.s.startsWith("fusion"));
+  if (fusionVariants.length && singles.length) {
+    const best = singles[0];
+    const avg = singles.reduce((a, b) => a + b.mean, 0) / singles.length;
+    const judgeSolo = singles.find((r) => r.s === judge.id);
     const d = (x) => `${x >= 0 ? "+" : ""}${(x * 100).toFixed(1)} pts`;
-    console.log(`\nfusion vs best single (${best.s}): ${d(fusionMean - best.mean)}`);
-    console.log(`fusion vs avg single:        ${d(fusionMean - avg)}`);
-    const judgeSolo = baselines.find((r) => r.s === judge.id);
-    if (judgeSolo) console.log(`fusion vs judge-model solo (${judge.id}): ${d(fusionMean - judgeSolo.mean)}`);
+    console.log("");
+    for (const fv of fusionVariants) {
+      console.log(`${fv.s}: ${(fv.mean * 100).toFixed(1)}%  ·  vs best single (${best.s}) ${d(fv.mean - best.mean)}  ·  vs avg single ${d(fv.mean - avg)}` + (judgeSolo ? `  ·  vs judge-solo ${d(fv.mean - judgeSolo.mean)}` : ""));
+    }
   }
 
   const out = args.out || `bench-results-${items.length}items.json`;

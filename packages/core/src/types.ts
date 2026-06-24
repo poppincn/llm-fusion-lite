@@ -65,6 +65,25 @@ export interface CompletionOptions {
   onToken?: (token: string) => void;
 }
 
+/**
+ * Optional fusion techniques layered on top of the base fan-out → synthesize
+ * pipeline. Each is independently toggleable; depth tiers pick sensible presets.
+ */
+export interface TechniqueConfig {
+  /** Mixture-of-Agents: rounds where panelists see peers' answers and revise. */
+  refineRounds: number;
+  /** Refine rounds explicitly resolve detected disagreements (debate flavor). */
+  debate: boolean;
+  /** Pairwise-rank candidates to weight the judge instead of one-pass scoring. */
+  pairwiseRank: boolean;
+  /** Panelists emit a self-confidence the judge factors in. */
+  confidence: boolean;
+  /** Sample the synthesis N times and pick the most consistent (1 = off). */
+  selfConsistency: number;
+  /** Verify the synthesized answer and revise once if it fails. */
+  verify: boolean;
+}
+
 export interface CompletionResult {
   text: string;
   /** provider-native model string actually used */
@@ -89,6 +108,10 @@ export interface Provider {
 export interface PanelResponse extends CompletionResult {
   modelId: string;
   label: string;
+  /** Self-reported confidence 0..1, when the confidence technique is on. */
+  confidence?: number;
+  /** True if this answer came out of a MoA refinement round. */
+  refined?: boolean;
 }
 
 /** Structured comparative analysis produced by the judge (phase A). */
@@ -142,6 +165,10 @@ export interface FusionResult {
   usage: FusionUsage;
   /** Per-call usage breakdown (panelists + judge) for the usage dashboard. */
   usageBreakdown: UsageRow[];
+  /** Which optional techniques ran for this fusion. */
+  techniques: TechniqueConfig;
+  /** Verification outcome, when the verify technique ran. */
+  verification?: { passed: boolean; revised: boolean };
 }
 
 /** Progress events emitted during a fusion run (for CLI/web streaming). */
@@ -157,8 +184,12 @@ export type FusionEvent =
   | { type: "panel_start"; modelId: string; label: string }
   | { type: "panel_token"; modelId: string; token: string }
   | { type: "panel_done"; response: PanelResponse }
+  | { type: "refine_round"; round: number; total: number }
+  | { type: "rank"; weights: { modelId: string; weight: number }[] }
   | { type: "judge_start"; judgeModelId: string }
   | { type: "analysis"; analysis: JudgeAnalysis }
+  | { type: "self_consistency"; samples: number }
+  | { type: "verify"; passed: boolean; revised: boolean }
   | { type: "answer_token"; token: string }
   | { type: "done"; result: FusionResult }
   | { type: "error"; message: string };
@@ -177,6 +208,8 @@ export interface FuseOptions {
   category?: string;
   /** Override the adjudicated depth tier. */
   depth?: Depth;
+  /** Override which optional techniques run (else derived from depth/config). */
+  techniques?: Partial<TechniqueConfig>;
   maxTokens?: number;
   onEvent?: (event: FusionEvent) => void;
   signal?: AbortSignal;

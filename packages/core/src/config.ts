@@ -2,7 +2,27 @@
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import type { ModelSpec, ProviderAuthMode, ProviderName } from "./types.js";
+import type { Depth, ModelSpec, ProviderAuthMode, ProviderName, TechniqueConfig } from "./types.js";
+
+/** Base pipeline only: fan-out → synthesize. No extra techniques. */
+export const TECHNIQUES_OFF: TechniqueConfig = {
+  refineRounds: 0,
+  debate: false,
+  pairwiseRank: false,
+  confidence: false,
+  selfConsistency: 1,
+  verify: false,
+};
+
+/** Everything on — used for the `deep` tier and the benchmark's max-quality run. */
+export const TECHNIQUES_DEEP: TechniqueConfig = {
+  refineRounds: 1,
+  debate: true,
+  pairwiseRank: true,
+  confidence: true,
+  selfConsistency: 2,
+  verify: true,
+};
 
 export interface FusionConfig {
   /** All models the engine knows about. */
@@ -26,6 +46,22 @@ export interface FusionConfig {
    * to "subscription" to call its CLI (claude / codex / gemini) instead.
    */
   providerAuth?: Partial<Record<ProviderName, ProviderAuthMode>>;
+  /** Default optional techniques (when depth doesn't dictate otherwise). */
+  techniques?: TechniqueConfig;
+}
+
+/**
+ * Resolve effective techniques: explicit override wins; else `deep` depth turns
+ * everything on; else the config default (or off).
+ */
+export function resolveTechniques(
+  override: Partial<TechniqueConfig> | undefined,
+  depth: Depth,
+  config: FusionConfig,
+): TechniqueConfig {
+  const base: TechniqueConfig =
+    depth === "deep" ? TECHNIQUES_DEEP : config.techniques ?? TECHNIQUES_OFF;
+  return override ? { ...base, ...override } : base;
 }
 
 export const DEFAULT_CATEGORIES = [

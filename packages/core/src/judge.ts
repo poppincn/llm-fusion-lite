@@ -22,7 +22,8 @@ function promptText(messages: ChatMessage[]): string {
 function panelDigest(panel: PanelResponse[]): string {
   return panel
     .map((p, i) => {
-      const head = `### Panelist ${i + 1} — id="${p.modelId}" (${p.label})`;
+      const conf = p.confidence != null ? ` [self-confidence ${(p.confidence * 100).toFixed(0)}%]` : "";
+      const head = `### Panelist ${i + 1} — id="${p.modelId}" (${p.label})${conf}`;
       if (p.error) return `${head}\n[ERROR: ${p.error}] (no response)`;
       const cites = p.citations?.length
         ? `\nSources: ${p.citations.map((c) => c.url).slice(0, 5).join(", ")}`
@@ -111,10 +112,20 @@ export async function runJudgeAnalysis(
   judge: ModelSpec,
   prompt: ChatMessage[],
   panel: PanelResponse[],
-  opts: { subject?: string; priors?: JudgePrior[]; signal?: AbortSignal } = {},
+  opts: {
+    subject?: string;
+    priors?: JudgePrior[];
+    pairwise?: Map<string, number>;
+    signal?: AbortSignal;
+  } = {},
 ): Promise<JudgeAnalysis> {
   const provider = getProvider(judge.provider);
   const priorText = priorsBlock(opts.subject ?? "this subject", opts.priors ?? [], panel);
+  const rankText =
+    opts.pairwise && opts.pairwise.size
+      ? `\n\nPairwise-ranking strength (0..1, from head-to-head comparisons of these answers — a strong corroborating signal):\n` +
+        [...opts.pairwise].sort((a, b) => b[1] - a[1]).map(([id, w]) => `- ${id}: ${w.toFixed(2)}`).join("\n")
+      : "";
   const res = await provider.complete(judge.model, {
     maxTokens: 4096,
     webSearch: false,
@@ -127,7 +138,7 @@ export async function runJudgeAnalysis(
       },
       {
         role: "user",
-        content: `USER REQUEST:\n${promptText(prompt)}\n\n${priorText}\n\nPANEL RESPONSES:\n${panelDigest(panel)}`,
+        content: `USER REQUEST:\n${promptText(prompt)}\n\n${priorText}${rankText}\n\nPANEL RESPONSES:\n${panelDigest(panel)}`,
       },
     ],
   });

@@ -1,8 +1,15 @@
 /** The fusion engine: classify → select panel → dispatch → judge → learn. */
 import { randomUUID } from "node:crypto";
 import type { FusionConfig } from "./config.js";
-import { authModeFor, getModel, loadConfig } from "./config.js";
+import { authModeFor, getModel, loadConfig, resolveTechniques } from "./config.js";
 import { adjudicate } from "./adjudicate.js";
+import {
+  parseConfidence,
+  refinePanel,
+  pairwiseRank,
+  selectConsistent,
+  verifyAndRevise,
+} from "./techniques.js";
 import { getProvider } from "./providers/index.js";
 import { resolveJudge, runJudgeAnalysis, runJudgeSynthesis } from "./judge.js";
 import type { FusionStore } from "./store.js";
@@ -75,6 +82,7 @@ export async function fuse(opts: FuseOptions, deps: FuseDeps = {}): Promise<Fusi
     const adj = await adjudicate(messages, config, opts.signal);
     const category = opts.category ?? adj.subject;
     const depth = opts.depth ?? adj.depth;
+    const tech = resolveTechniques(opts.techniques, depth, config);
     emit({ type: "category", category });
     emit({ type: "depth", depth, rationale: adj.rationale });
 
@@ -107,27 +115,56 @@ export async function fuse(opts: FuseOptions, deps: FuseDeps = {}): Promise<Fusi
       panel: panelSpecs.map((s) => ({ id: s.id, label: s.label })),
     });
 
-    // 3. Dispatch panel in parallel
-    const panel: PanelResponse[] = await Promise.all(
+    // 3. Dispatch panel in parallel (optionally asking for self-confidence)
+    const panelMessages = tech.confidence
+      ? [
+          ...messages,
+          {
+            role: "system" as const,
+            content: 'End your answer with a final line exactly like "Confidence: 75%" — your calibrated confidence that it is correct.',
+          },
+        ]
+      : messages;
+    let panel: PanelResponse[] = await Promise.all(
       panelSpecs.map(async (spec) => {
         emit({ type: "panel_start", modelId: spec.id, label: spec.label });
         const provider = getProvider(spec.provider);
         const res = await provider.complete(spec.model, {
-          messages,
+          messages: panelMessages,
           maxTokens: opts.maxTokens,
           webSearch: webSearch && (spec.webSearch ?? false),
           depth,
           signal: opts.signal,
           onToken: (t) => emit({ type: "panel_token", modelId: spec.id, token: t }),
         });
-        const pr: PanelResponse = { ...res, modelId: spec.id, label: spec.label };
+        const pr: PanelResponse = {
+          ...res,
+          modelId: spec.id,
+          label: spec.label,
+          confidence: tech.confidence ? parseConfidence(res.text) : undefined,
+        };
         emit({ type: "panel_done", response: pr });
         return pr;
       }),
     );
 
-    // 4. Judge — phase A (influence-weighted analysis, informed by learned SME)
     const judge = resolveJudge(config, opts.judge);
+
+    // 3b. Mixture-of-Agents refinement: panelists revise after seeing peers.
+    for (let r = 0; r < tech.refineRounds; r++) {
+      emit({ type: "refine_round", round: r + 1, total: tech.refineRounds });
+      panel = await refinePanel(messages, panel, config, { debate: tech.debate, signal: opts.signal });
+      for (const p of panel) emit({ type: "panel_done", response: p });
+    }
+
+    // 3c. Pairwise ranking → influence weights for the judge.
+    let pairwise: Map<string, number> | undefined;
+    if (tech.pairwiseRank) {
+      pairwise = await pairwiseRank(messages, panel, judge, opts.signal);
+      emit({ type: "rank", weights: [...pairwise].map(([modelId, weight]) => ({ modelId, weight })) });
+    }
+
+    // 4. Judge — phase A (influence-weighted analysis, informed by learned SME)
     const priors = store
       ? store.subjectExpertise(panel.map((p) => p.modelId), category)
       : [];
@@ -136,21 +173,56 @@ export async function fuse(opts: FuseOptions, deps: FuseDeps = {}): Promise<Fusi
     const analysis = await runJudgeAnalysis(judge, messages, panel, {
       subject: category,
       priors,
+      pairwise,
       signal: opts.signal,
     });
     emit({ type: "analysis", analysis });
 
-    // 5. Judge — phase B (streamed synthesis)
-    const synth = await runJudgeSynthesis(judge, messages, panel, analysis, {
-      maxTokens: opts.maxTokens ? Math.max(opts.maxTokens, 4096) : 8192,
-      signal: opts.signal,
-      onToken: (t) => emit({ type: "answer_token", token: t }),
-    });
-    const finalAnswer = synth.text;
+    // 5. Judge — phase B (synthesis). Stream live only when no post-processing
+    // (self-consistency / verify) could change the answer afterward.
+    const synthMaxTokens = opts.maxTokens ? Math.max(opts.maxTokens, 4096) : 8192;
+    const streamLive = tech.selfConsistency <= 1 && !tech.verify;
+    let finalAnswer: string;
+    let judgeIn = 0;
+    let judgeOut = 0;
+
+    if (tech.selfConsistency > 1) {
+      emit({ type: "self_consistency", samples: tech.selfConsistency });
+      const samples = await Promise.all(
+        Array.from({ length: tech.selfConsistency }, () =>
+          runJudgeSynthesis(judge, messages, panel, analysis, { maxTokens: synthMaxTokens, signal: opts.signal }),
+        ),
+      );
+      const idx = await selectConsistent(messages, samples.map((s) => s.text), judge, opts.signal);
+      finalAnswer = samples[idx].text;
+      for (const s of samples) {
+        judgeIn += s.usage?.inputTokens ?? 0;
+        judgeOut += s.usage?.outputTokens ?? 0;
+      }
+    } else {
+      const synth = await runJudgeSynthesis(judge, messages, panel, analysis, {
+        maxTokens: synthMaxTokens,
+        signal: opts.signal,
+        onToken: streamLive ? (t) => emit({ type: "answer_token", token: t }) : undefined,
+      });
+      finalAnswer = synth.text;
+      judgeIn = synth.usage?.inputTokens ?? 0;
+      judgeOut = synth.usage?.outputTokens ?? 0;
+    }
+
+    // 5b. Verification + one revision.
+    let verification: { passed: boolean; revised: boolean } | undefined;
+    if (tech.verify) {
+      const v = await verifyAndRevise(messages, finalAnswer, judge, { maxTokens: synthMaxTokens, signal: opts.signal });
+      if (v.revised) finalAnswer = v.answer;
+      verification = { passed: v.passed, revised: v.revised };
+      emit({ type: "verify", passed: v.passed, revised: v.revised });
+    }
+
+    // Emit the final answer once if it wasn't streamed live.
+    if (!streamLive) emit({ type: "answer_token", token: finalAnswer });
 
     // 6. Usage + result
-    const judgeIn = synth.usage?.inputTokens ?? 0;
-    const judgeOut = synth.usage?.outputTokens ?? 0;
     const usage: FusionUsage = {
       inputTokens:
         panel.reduce((a, p) => a + (p.usage?.inputTokens ?? 0), 0) + judgeIn,
@@ -200,6 +272,8 @@ export async function fuse(opts: FuseOptions, deps: FuseDeps = {}): Promise<Fusi
       createdAt: new Date().toISOString(),
       usage,
       usageBreakdown,
+      techniques: tech,
+      verification,
     };
 
     // 7. Learn
