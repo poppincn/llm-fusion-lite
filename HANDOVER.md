@@ -85,20 +85,23 @@ node scripts/bench/run.mjs <data.jsonl> --dry-run   # validate, no API calls
 
 ## Open issues / bugs found
 
-1. **Subscription-CLI transient failures score as wrong** — e.g. `claude -p` errored on a benchmark item. The engine keeps a failed panelist as 0-influence (fine), but the *harness baseline* counts it as incorrect, understating that model. Add a retry on subscription-CLI error (harness, and consider engine panel).
-2. **Verifier is blind to knowledge gaps** — `verifyAndRevise` runs at `light` depth (no tools), so on all-panel-wrong items (GPQA item 18) it can't catch the error. It needs web/code access on the `deep` tier.
-3. **Confident-wrong consensus** — the judge trusted a wrong Opus at influence 0.97 (item 18). The online SME loop would learn this, but it's off during benchmarks; consider confidence calibration.
-4. **Usage `$` is unmetered for everything on this setup** — only Gemini is API-billed and it has **no cost metadata** in the registry, so dollar figures read as 0/unmetered. Add `costPer1MIn/Out` for `gemini-3.5-flash` (and `gpt-5.5`) if a real $ number is wanted.
+1. ✅ **FIXED — Subscription-CLI transient failures score as wrong.** `cli.ts` now retries once on a non-abort subprocess failure (benefits panelists, judge, classifier), and the harness baseline retries once on an empty/errored single-model call. Genuine aborts are not retried.
+2. ✅ **FIXED — Verifier was blind to knowledge gaps.** `verifyAndRevise` now runs at the run's depth with hosted tools (web search + code execution) on the `deep` tier, gated on the judge being in **api** mode (subscription CLIs ignore the depth/tool flags — see note below). Validated live with a Gemini api judge.
+3. **Confident-wrong consensus** — the judge trusted a wrong Opus at influence 0.97 (item 18). The online SME loop would learn this, but it's off during benchmarks; consider confidence calibration. *(Open.)*
+4. **Usage `$` is unmetered for everything on this setup** — only Gemini is API-billed and it has **no cost metadata** in the registry, so dollar figures read as 0/unmetered. Add `costPer1MIn/Out` for `gemini-3.5-flash` (and `gpt-5.5`) if a real $ number is wanted. *(Open.)*
+5. ✅ **FIXED — Subscription panelists ran the session default, not their declared model.** The CLI specs never passed `--model`, so `claude -p`/`codex exec` answered on whatever the logged-in session defaulted to — a panelist declared `claude-opus-4-8` could silently run Sonnet (the suspected cause of the under-driven subscription-Opus path, next-step #5). Now each CLI is pinned via `--model`/`-m`; the Anthropic panelist self-reports as Opus 4.8. **Re-benchmark: prior numbers (fusion-deep 87.5%) predate this fix and likely understated the Opus baseline/panelist.**
+
+> **Tool-enabled verification needs an api-mode judge.** On this machine the judge is subscription `claude-opus-4-8`, whose CLI ignores depth/tool flags — so the deep-tier verifier won't actually search/execute unless you set an api-mode judge (only `GOOGLE_API_KEY` is present here ⇒ `--judge gemini-2.5-pro`/`gemini-3.5-flash`). To make tool-enabled verification the default, run the Anthropic judge in api mode (set `ANTHROPIC_API_KEY` + `providerAuth.anthropic = "api"`).
 
 ---
 
 ## Recommended next steps (prioritized)
 
-1. **Tool-enabled verifier (deep tier).** Let `verifyAndRevise` use web search / code execution (not `light`). Highest-value fix for the all-wrong failure mode. → `techniques.ts`, pass a depth/tools flag.
-2. **Retry subscription-CLI errors.** In `scripts/bench/run.mjs` (baselines) and optionally `providers/cli.ts` — one retry on a non-zero exit / empty output. Removes benchmark noise from transient CLI flakiness.
-3. **Ablate the techniques.** `fusion-deep` is ~1.9× latency; the visible lift was mostly **MoA refine**. Run refine-only vs pairwise-only vs SC-only vs all-on on items 11–20 to keep only what pays for itself, then set the `deep` preset accordingly. (Add per-technique systems or flags to the harness.)
-4. **Fairer, larger GPQA run for a citable number.** Drive baselines at comparable reasoning depth (see #5), then run a bigger slice (e.g. 50–198) to produce a GPQA-D accuracy directly comparable to Sakana Fugu's 95.5.
-5. **Investigate `claude -p` reasoning depth.** The Opus subscription path looks under-driven as both baseline and panelist. If it can engage deeper reasoning (effort/think flags), panelist quality — and thus fusion — improves.
+1. ✅ **DONE — Tool-enabled verifier (deep tier).** `verifyAndRevise` now uses web search / code execution at `deep` depth (api-mode judge required). → `techniques.ts` `tools` flag, wired in `fusion.ts`.
+2. ✅ **DONE — Retry subscription-CLI errors.** One retry in `providers/cli.ts` (engine) + one in the harness baseline.
+3. 🟡 **Ablate the techniques (harness ready).** Per-technique systems shipped: `fusion-refine|-debate|-pairwise|-confidence|-sc|-verify` plus `--depth`. Still TODO: actually run the ablation on items 11–20 and set the `deep` preset to only what pays for its latency. **Re-run now that model pinning (#5) changed the baseline.**
+4. **Fairer, larger GPQA run for a citable number.** Baselines now run at the right model (#5 fixed); next drive baselines at comparable reasoning depth, then run a bigger slice (e.g. 50–198) for a GPQA-D number comparable to Sakana Fugu's 95.5. (A pinned re-run of 11–18 is in `scripts/bench/data/out-pinned-11-18.json`.)
+5. ✅ **DONE (root cause) — `claude -p` ran the wrong model.** Was the session default, not the declared model; now pinned via `--model`. Further depth tuning (think/effort triggers in the prompt) is still possible upside but the headline gap is closed.
 6. **Multi-scope decomposition (phase 2).** Adjudicator splits a request into sub-scopes, each its own cross-model panel, then a meta-aggregator. Data model already structured for it.
 7. **Derive personas from SME.** Once a model is consistently dominant in a subject, promote it into a named role — the "personas later" plan from the vision.
 8. **era-code provisioning + governance.** Wire the `provisionFusion()` step into `~/era-code` (recipe in `docs/PUBLISHING.md`); bootstrap `.era/memory` governance for this repo per house rules.

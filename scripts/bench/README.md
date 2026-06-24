@@ -11,9 +11,31 @@ node scripts/bench/run.mjs data.jsonl --systems fusion,claude-opus-4-8,gpt-5.5 -
 node scripts/bench/run.mjs data.jsonl --dry-run                  # validate dataset + systems, no API calls
 ```
 
-Flags: `--systems <csv>` (default: `fusion` + every available model) · `--judge <id>` · `--limit <n>` · `--panel <csv>` (force fusion's panel) · `--out <file>`.
+Flags: `--systems <csv>` (default: `fusion` + every available model) · `--judge <id>` · `--offset <n>` · `--limit <n>` · `--panel <csv>` (force fusion's panel) · `--depth <light|standard|deep>` (force the depth tier for fusion systems) · `--out <file>`.
 
 Needs provider keys/subscriptions configured (`fuse doctor`). Cost: each item runs once per system, plus an LLM-judge call for judged items — so ≈ `(systems + 1) × items` model calls. Start with `--limit`.
+
+## Technique ablation
+
+Each fusion technique can be run in isolation as its own system, so you can see which ones actually pay for their latency before fixing the `deep` preset. Every preset is a *full* `TechniqueConfig`, so it fully determines what runs regardless of the depth tier:
+
+| system | what runs |
+| --- | --- |
+| `fusion` | base pipeline (fan-out → synthesize) |
+| `fusion-refine` | + MoA refinement only |
+| `fusion-debate` | + MoA refinement with explicit disagreement resolution |
+| `fusion-pairwise` | + pairwise ranking → judge weights only |
+| `fusion-confidence` | + panelist self-confidence only |
+| `fusion-sc` | + self-consistency (2 synthesis samples) only |
+| `fusion-verify` | + post-synthesis verify/revise only |
+| `fusion-deep` | everything on |
+
+```bash
+node scripts/bench/run.mjs data.jsonl --depth deep \
+  --systems fusion,fusion-refine,fusion-pairwise,fusion-sc,fusion-verify,fusion-deep
+```
+
+> The **tool-enabled verifier** (web search + code execution at `deep` depth) only engages when the judge runs in **api** mode — subscription CLIs ignore the depth/tool flags. To ablate it with tools live, pass an api-mode judge, e.g. `--judge gemini-2.5-pro`.
 
 ## Dataset format (JSONL)
 
