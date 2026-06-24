@@ -18,7 +18,34 @@ for the visual pipeline. This doc is the operational get-started + what to do ne
 - **Optimization techniques shipped** (MoA refine, debate, pairwise rank, confidence, self-consistency, verify),
   composable via `TechniqueConfig`; `standard` tier = base flow, `deep` = all on.
 - **Benchmark (GPQA-D 11–18), pre-pinning:** `fusion-deep` 87.5% > base `fusion` 75% > best single 62.5%.
-- **Benchmark (GPQA-D 11–18), AFTER model-pinning fix** (`scripts/bench/data/out-pinned-11-18.json`): base `fusion` **87.5%** = `fusion-deep` **87.5%** > best single `gpt-5.5` **75%** > `gemini-3.5-flash` 50% > `claude-opus-4-8` 37.5%. Fusion beats best single by **+12.5 pts** and the Opus-solo judge by **+50 pts** — synthesis lifts a weak judge to a correct answer. **Pinning lifted base fusion (75→87.5) and the best single (62.5→75), erasing deep's apparent edge** (deep added +40% latency, 0 accuracy on this slice). The only miss for both is **gpqa-18** (the confident-wrong all-panel-wrong item) — the tool-enabled verifier can only catch it with an api-mode judge (separate experiment). *n=8 is small (1 item = 12.5 pts); needs a larger slice to be citable.*
+- **Benchmark (GPQA-D 11–18), AFTER model-pinning fix** (`scripts/bench/data/out-pinned-11-18.json`): base `fusion` **87.5%** = `fusion-deep` **87.5%** > best single `gpt-5.5` **75%** > `gemini-3.5-flash` 50% > `claude-opus-4-8` 37.5%. **Pinning lifted base fusion (75→87.5) and the best single (62.5→75), erasing deep's apparent edge** (deep added +40% latency, 0 accuracy on this slice).
+
+### ⚠️ KEY FINDING (2026-06-24): the judge is the bottleneck, and the n=8 win didn't hold
+
+A larger slice **GPQA-D 19–34** (`scripts/bench/data/out-pinned-19-34.json`, 16 items, 0 errors) flips the story:
+
+| system | 19–34 | combined 11–34 (24) |
+| --- | --- | --- |
+| `gpt-5.5` (single) | **87.5%** | **83.3%** ← best |
+| `gemini-3.5-flash` (single) | 81.3% | 70.8% |
+| **`fusion` (Opus judge)** | **75.0%** | **79.2%** |
+| `claude-opus-4-8` (single) | 62.5% | 54.2% |
+| **panel majority-vote (approx)** | **~93.8%** | — |
+
+**On 24 GPQA-D items, fusion (79.2%) does NOT beat the best single (gpt-5.5 83.3%).** The earlier "+12.5" was a lucky slice. Worse: on 19–34 a **plain majority vote of the panel scores ~94%** while the Opus-judge synthesis delivers **75%** — *the judge is actively destroying the panel's collective knowledge.*
+
+Mechanism (from captured per-item influence, all 4 fusion-losses on 19–34 had the correct answer present in the panel):
+- **Judge self-preference** (gpqa-30, 31): the Opus judge weighted the *wrong* `claude-opus-4-8` panelist at 0.85–0.92 while the *correct* gpt-5.5 + gemini got 0.08–0.12. `judge.ts` `panelDigest` shows the judge each panelist's real `id`/label, so the Opus judge over-trusts the Opus answer. (`refinePanel` already anonymizes peers as "Solver A/B/C"; the judge does not.)
+- **Synthesis failure with correct inputs** (gpqa-20): gpt-5.5 + gemini both correct at **0.95** influence, yet the final answer was still wrong — the synthesis step itself flipped it.
+- The judge here (`claude-opus-4-8`) is the **weakest single model** on this set (54%); using your weakest model to adjudicate a stronger panel is self-defeating.
+
+**Candidate fixes (need a decision — several touch the deliberate "synthesis over selection" design):**
+1. **Anonymize panelist identity in the judge** (drop `id`/label from `panelDigest`, key contributions by position) — removes self-preference; fully consistent with the synthesis design. *Lowest-risk, do first.*
+2. **Use the strongest model as judge** (or any model not also on the panel) — e.g. `--judge gpt-5.5`; re-run to confirm.
+3. **Add an optional plurality/majority aggregator for objective/short-answer tasks** (or feed the plurality to the judge as a strong prior it must justify overriding). Contradicts pure-synthesis, so it's a product call.
+4. **Confidence calibration** (open bug #3) — down-weight confident-but-wrong panelists.
+
+*Until the judge bottleneck is addressed, the headline "fusion beats frontier" is NOT supported on GPQA-D.*
 
 ---
 
