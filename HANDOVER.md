@@ -17,7 +17,8 @@ for the visual pipeline. This doc is the operational get-started + what to do ne
 - **Benchmark harness** works against GPQA-Diamond (objective grading).
 - **Optimization techniques shipped** (MoA refine, debate, pairwise rank, confidence, self-consistency, verify),
   composable via `TechniqueConfig`; `standard` tier = base flow, `deep` = all on.
-- **Latest benchmark (GPQA-D 11–18):** `fusion-deep` 87.5% > base `fusion` 75% > best single 62.5%. Techniques help on hard items; mechanism confirmed (MoA refine corrected a wrong panelist on item 11).
+- **Benchmark (GPQA-D 11–18), pre-pinning:** `fusion-deep` 87.5% > base `fusion` 75% > best single 62.5%.
+- **Benchmark (GPQA-D 11–18), AFTER model-pinning fix** (`scripts/bench/data/out-pinned-11-18.json`): base `fusion` **87.5%** = `fusion-deep` **87.5%** > best single `gpt-5.5` **75%** > `gemini-3.5-flash` 50% > `claude-opus-4-8` 37.5%. Fusion beats best single by **+12.5 pts** and the Opus-solo judge by **+50 pts** — synthesis lifts a weak judge to a correct answer. **Pinning lifted base fusion (75→87.5) and the best single (62.5→75), erasing deep's apparent edge** (deep added +40% latency, 0 accuracy on this slice). The only miss for both is **gpqa-18** (the confident-wrong all-panel-wrong item) — the tool-enabled verifier can only catch it with an api-mode judge (separate experiment). *n=8 is small (1 item = 12.5 pts); needs a larger slice to be citable.*
 
 ---
 
