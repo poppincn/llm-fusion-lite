@@ -25,21 +25,31 @@ interface CliSpec {
   /** npm package that provides the CLI. */
   pkg: string;
   /**
-   * Build the argv (after the bin) that runs a one-shot prompt. `outFile`, when
+   * Build the argv (after the bin) that runs a one-shot prompt. `model` is the
+   * registry's provider-native model string, passed through so the CLI runs the
+   * model the panel asked for rather than the session default. `outFile`, when
    * provided, is a path the CLI should write its final message to (used for CLIs
    * whose stdout is a noisy transcript rather than just the answer).
    */
-  buildArgs(prompt: string, outFile?: string): string[];
+  buildArgs(prompt: string, model: string, outFile?: string): string[];
   /** When true, cliComplete passes a temp file and reads the answer from it. */
   usesOutFile?: boolean;
 }
 
-/** Per-provider CLI wiring (grounded against the published packages). */
+/**
+ * Per-provider CLI wiring (grounded against the published packages).
+ *
+ * Each spec pins `--model` to the registry's model string. Without it the CLI
+ * runs the logged-in session's DEFAULT model, so a panelist declared as
+ * "claude-opus-4-8" could silently answer on Sonnet — understating it as both a
+ * panelist and a benchmark baseline. The installed `claude`/`codex` CLIs accept
+ * the registry strings (e.g. `claude --model claude-opus-4-8`) directly.
+ */
 export const CLI_SPECS: Record<ProviderName, CliSpec> = {
   anthropic: {
     bin: "claude",
     pkg: "@anthropic-ai/claude-code",
-    buildArgs: (prompt) => ["-p", prompt],
+    buildArgs: (prompt, model) => ["-p", "--model", model, prompt],
   },
   openai: {
     // `codex exec` renders a transcript to stdout and the final message can be
@@ -48,13 +58,13 @@ export const CLI_SPECS: Record<ProviderName, CliSpec> = {
     bin: "codex",
     pkg: "@openai/codex",
     usesOutFile: true,
-    buildArgs: (prompt, outFile) =>
-      ["exec", "--color", "never", ...(outFile ? ["-o", outFile] : []), prompt],
+    buildArgs: (prompt, model, outFile) =>
+      ["exec", "--color", "never", "-m", model, ...(outFile ? ["-o", outFile] : []), prompt],
   },
   google: {
     bin: "gemini",
     pkg: "@google/gemini-cli",
-    buildArgs: (prompt) => ["-p", prompt],
+    buildArgs: (prompt, model) => ["-m", model, "-p", prompt],
   },
 };
 
@@ -208,7 +218,7 @@ async function cliAttempt(
 
     const child = execFile(
       bin,
-      spec.buildArgs(prompt, outFile),
+      spec.buildArgs(prompt, modelString, outFile),
       { timeout: CLI_TIMEOUT_MS, maxBuffer: 64 * 1024 * 1024 },
       (err, stdout) => {
         // Prefer the out-file (just the final message) when used; else stdout.
