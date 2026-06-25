@@ -116,7 +116,10 @@ everything on. We also produced a visual explainer (`docs/fusion-flow.html`, `9f
 
 ---
 
-## 5. Latest result — base vs all-techniques fusion (GPQA-Diamond 11–18)
+## 5. Earlier result — base vs all-techniques fusion (GPQA-Diamond 11–18)
+
+> **Superseded by §6.** The numbers below predate two fixes (model-pinning and judge-anonymization) and a larger run that overturned the headline. Kept as the historical record.
+
 
 We A/B'd `fusion` (base) vs `fusion-deep` (all techniques) vs the three baselines on **unseen, harder** items
 11–18 (items 1–10 had ceilinged):
@@ -147,3 +150,91 @@ pays for itself (the visible lift was mostly MoA refine); (4) distrust **confide
 loop would, but it was off for the benchmark).
 
 See [`HANDOVER.md`](HANDOVER.md) for the prioritized next steps and everything a fresh session needs.
+
+## 6. The course-correction (2026-06-24): a wrong model, a lucky slice, and the judge bottleneck
+
+This session set out to action §5's open list (tool-enabled verifier, CLI retry, ablation, larger run). Building those
+forced us to look harder at the harness — and what we found rewrote the story. The short version: **§5's win was an
+artifact of two bugs, and once they were fixed, the real bottleneck turned out to be the judge itself.**
+
+### 6.1 The panelists were running the wrong model
+
+The subscription CLI specs invoked `claude -p "<prompt>"` and `codex exec "<prompt>"` **without `--model`**. So a panelist
+declared `claude-opus-4-8` actually answered on whatever the logged-in session's *default* model was — likely Sonnet.
+The "Opus" baseline and the "Opus" panelist were both under-driven. We pinned every CLI to its registry model
+(`claude --model claude-opus-4-8`, `codex exec -m gpt-5.5`); the Anthropic panelist now self-reports as Opus 4.8.
+
+Re-running the **exact same GPQA-D 11–18 slice** after the fix:
+
+| System | Before pinning | After pinning |
+|---|---|---|
+| `fusion` (base) | 75.0% | **87.5%** |
+| `fusion-deep` (all techniques) | 87.5% | **87.5%** |
+| best single (`gpt-5.5`) | 62.5% | **75.0%** |
+
+Pinning lifted base fusion (75→87.5) and the best single (62.5→75) — and **erased fusion-deep's apparent edge**. The
+"techniques add +12.5 pts" story in §5 was largely the deep tier compensating for under-driven base models. With models
+at full strength, base ≈ deep, and deep just costs +40% latency for nothing on this slice. (First ablation signal: the
+harness now supports per-technique systems — `fusion-refine|-debate|-pairwise|-confidence|-sc|-verify` + `--depth`.)
+
+### 6.2 The n=8 win didn't survive a bigger sample
+
+n=8 means one item = 12.5 pts. We ran a fresh, larger slice — **GPQA-D 19–34 (16 items, 0 errors)** — and the result
+flipped:
+
+| System | 19–34 | Combined 11–34 (24) |
+|---|---|---|
+| `gpt-5.5` (single) | **87.5%** | **83.3%**  ← best |
+| `gemini-3.5-flash` (single) | 81.3% | 70.8% |
+| **`fusion`** (Opus judge) | **75.0%** | **79.2%** |
+| `claude-opus-4-8` (single) | 62.5% | 54.2% |
+| **panel majority-vote (approx)** | **~93.8%** | — |
+
+**On 24 GPQA-D items, fusion (79.2%) does not beat the best single (gpt-5.5 83.3%).** The §5 "+12.5 over best single" was
+a lucky slice (gpt-5.5 happened to do badly on 11–18). The honest headline: *as configured, fusion did not beat
+frontier on GPQA-D.*
+
+### 6.3 The bottleneck is the judge, not the panel
+
+The damning number is the last row. On 19–34 a **plain majority vote of the three panelists scores ~94%**, but the
+influence-weighted **Opus-judge synthesis delivers 75%**. The panel almost always *contains* the right answer — the judge
+is *throwing it away*. We dug into the captured per-item influence. In **all four** items where fusion lost but gpt-5.5
+was right, the correct answer was sitting in the panel:
+
+- **Judge self-preference** (items 30, 31): the Opus judge weighted the *wrong* `claude-opus-4-8` panelist at
+  **0.85–0.92** while the *correct* gpt-5.5 + gemini got **0.08–0.12**. The judge could see each panelist's real model id
+  in the transcript — and an Opus judge over-trusts the Opus answer.
+- **Synthesis failure with correct inputs** (item 20): gpt-5.5 + gemini were both correct and weighted at **0.95**, yet
+  the synthesized answer was still wrong. The synthesis step itself flipped a correct, high-confidence input.
+- The judge here (`claude-opus-4-8`) was the **weakest single model** on this set (54%). Using your weakest model to
+  adjudicate a stronger panel is self-defeating.
+
+This is the real research finding of the project so far: **harvested diversity works (the panel is ~94% right
+collectively); the value is being destroyed at the synthesis/judge layer.**
+
+### 6.4 First fix — anonymize the judge
+
+`refinePanel` already hides model identity from peers ("Solver A/B/C") to keep refinement honest. The judge did not — it
+saw `id="claude-opus-4-8" (Claude Opus 4.8)` in the digest, plus model ids in the SME-prior and pairwise blocks. We
+**anonymized all of it**: panelists are now "Panelist 1..N" everywhere the judge looks, contributions are keyed by
+position and mapped back to modelId internally. Self-preference can't operate on identity it can't see. *(Validation
+re-run of 19–34 with the anonymized judge in progress — number lands in HANDOVER §Current-state.)*
+
+### 6.5 What this leaves on the table
+
+The verifier work shipped and is mechanically validated, but on the one hardest item (gpqa-18, a numeric abundance
+calculation) the tool-enabled verifier with a *Gemini* judge still PASSed the wrong answer — because Gemini's deep tier
+gives web search but **no code execution**, and a calculation needs code, not search. The Anthropic api deep tier *does*
+add code execution, but there's no `ANTHROPIC_API_KEY` on this machine to prove it. Open levers, in priority order:
+
+1. **Stronger / non-self judge** — re-run with `--judge gpt-5.5` (strongest, off-panel-identity) and compare to the
+   anonymized-Opus run. Quickest test of the bottleneck hypothesis.
+2. **Plurality aggregator for objective tasks** — the ~94% majority-vote ceiling is a standing rebuke to pure synthesis;
+   at minimum feed plurality to the judge as a strong prior it must justify overriding. (A product call: it bends the
+   deliberate "synthesis over selection" choice.)
+3. **Tool-matched verification** — test the verifier with an Anthropic api judge (code execution) on calc-bound items;
+   the prompt now tells it to *recompute*, not re-reason.
+4. **Confidence calibration** — down-weight confident-but-wrong panelists (the item-18 / item-20 failure mode).
+
+The pipeline is sound and the diversity is real; the next gains are in *how the panel's collective knowledge is
+aggregated*, not in adding more pre-synthesis techniques.
