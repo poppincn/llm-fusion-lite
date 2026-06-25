@@ -39,13 +39,19 @@ Mechanism (from captured per-item influence, all 4 fusion-losses on 19–34 had 
 - **Synthesis failure with correct inputs** (gpqa-20): gpt-5.5 + gemini both correct at **0.95** influence, yet the final answer was still wrong — the synthesis step itself flipped it.
 - The judge here (`claude-opus-4-8`) is the **weakest single model** on this set (54%); using your weakest model to adjudicate a stronger panel is self-defeating.
 
-**Candidate fixes (need a decision — several touch the deliberate "synthesis over selection" design):**
-1. **Anonymize panelist identity in the judge** (drop `id`/label from `panelDigest`, key contributions by position) — removes self-preference; fully consistent with the synthesis design. *Lowest-risk, do first.*
-2. **Use the strongest model as judge** (or any model not also on the panel) — e.g. `--judge gpt-5.5`; re-run to confirm.
-3. **Add an optional plurality/majority aggregator for objective/short-answer tasks** (or feed the plurality to the judge as a strong prior it must justify overriding). Contradicts pure-synthesis, so it's a product call.
-4. **Confidence calibration** (open bug #3) — down-weight confident-but-wrong panelists.
+**⚠️ Evaluation caveat (discovered validating the fix below):** re-running the **identical** 19–34 config twice moved *every*
+system ±6–12 pts (`out-anon-19-34.json` vs `out-pinned-19-34.json`) — subscription models are non-deterministic and
+re-answer each run. **Run-to-run variance on 16 items dwarfs the effects we're testing**, so single-slice A/Bs are
+unreliable. Fix evaluation first: 50+ items × repeated trials (plurality-graded), or accept only large deltas.
 
-*Until the judge bottleneck is addressed, the headline "fusion beats frontier" is NOT supported on GPQA-D.*
+**Candidate fixes (need a decision — several touch the deliberate "synthesis over selection" design):**
+1. ✅ **DONE — Anonymize panelist identity in the judge.** `panelDigest`/priors/pairwise now show "Panelist N", contributions keyed by position → modelId. Removes self-preference; design-consistent. **But the validation run was inconclusive (variance, above) and gpqa-31 showed the anonymized judge STILL weighting a wrong panelist 0.96 — identity bias isn't the whole story; the judge can't discriminate correctness on hard items.** Kept (strictly correct, no downside) but not a proven accuracy win.
+2. **Use the strongest model as judge** (or any model not also on the panel) — e.g. `--judge gpt-5.5`; re-run *under a variance-controlled regime*.
+3. **Add an optional plurality/majority aggregator for objective/short-answer tasks** (or feed the plurality to the judge as a strong prior it must justify overriding). Contradicts pure-synthesis, so it's a product call. (Floor: gpqa-33 had 2/3 panelists wrong — plurality loses there too.)
+4. **Judge discrimination** — surface signals the judge can't fake (code re-derivation, cross-checks) instead of asking it to self-assess correctness.
+5. **Confidence calibration** (open bug #3) — down-weight confident-but-wrong panelists.
+
+*Until the judge bottleneck is addressed (and evaluation is made rigorous), the headline "fusion beats frontier" is NOT supported on GPQA-D.*
 
 ---
 

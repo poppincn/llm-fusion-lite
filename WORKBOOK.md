@@ -217,8 +217,33 @@ collectively); the value is being destroyed at the synthesis/judge layer.**
 `refinePanel` already hides model identity from peers ("Solver A/B/C") to keep refinement honest. The judge did not — it
 saw `id="claude-opus-4-8" (Claude Opus 4.8)` in the digest, plus model ids in the SME-prior and pairwise blocks. We
 **anonymized all of it**: panelists are now "Panelist 1..N" everywhere the judge looks, contributions are keyed by
-position and mapped back to modelId internally. Self-preference can't operate on identity it can't see. *(Validation
-re-run of 19–34 with the anonymized judge in progress — number lands in HANDOVER §Current-state.)*
+position and mapped back to modelId internally. Self-preference can't operate on identity it can't see.
+
+**But the validation run refused to give a clean answer — and that itself is the finding.** Re-running 19–34 with the
+anonymized judge:
+
+| System | Opus judge (named) | Opus judge (anonymized) |
+|---|---|---|
+| `gpt-5.5` (single) | 87.5% | 93.8% |
+| `gemini-3.5-flash` (single) | 81.3% | 75.0% |
+| **`fusion`** | **75.0%** | **68.8%** |
+| `claude-opus-4-8` (single) | 62.5% | 56.3% |
+
+*Every* system moved ±6–12 pts between two runs of the **identical configuration** — because the subscription models are
+non-deterministic and re-answer on each run. The singles aren't supposed to depend on the judge at all, yet they swung
+too. **Run-to-run variance on 16 items dwarfs the effect we were trying to measure**, so a single-slice A/B can't isolate
+anonymization. Two consequences:
+
+1. **Evaluation methodology was naive.** Comparing one 8- or 16-item run against another conflates the change under test
+   with sampling noise. Real evaluation needs many more items and/or repeated trials per item (majority over k samples),
+   and ideally temperature-0 — which the subscription CLIs don't expose. Every headline in §5–§6 carries this caveat.
+2. **Identity bias is not the whole story.** On gpqa-31 the anonymized judge *still* weighted a **wrong** panelist at
+   **0.96** while the correct one got 0.04. With identity hidden, the judge defaulted to the most confident, elaborate
+   answer — which was wrong. The deeper problem is **the judge cannot reliably tell which answer is correct on hard
+   items**; anonymization removes one bias vector but not the core discrimination failure.
+
+Anonymization stays (it's strictly correct and removes a real bias with no downside), but it is *not* a proven accuracy
+win, and the judge-discrimination gap is now the headline open problem.
 
 ### 6.5 What this leaves on the table
 
@@ -227,14 +252,20 @@ calculation) the tool-enabled verifier with a *Gemini* judge still PASSed the wr
 gives web search but **no code execution**, and a calculation needs code, not search. The Anthropic api deep tier *does*
 add code execution, but there's no `ANTHROPIC_API_KEY` on this machine to prove it. Open levers, in priority order:
 
-1. **Stronger / non-self judge** — re-run with `--judge gpt-5.5` (strongest, off-panel-identity) and compare to the
-   anonymized-Opus run. Quickest test of the bottleneck hypothesis.
+0. **Fix evaluation first (§6.4).** Run-to-run variance is ±6–12 pts on 16 items. Until we average repeated trials over a
+   larger set (e.g. 50+ items × k samples, plurality-graded), no single run can adjudicate the levers below. This is the
+   prerequisite, not optional.
+1. **Stronger / non-self judge** — re-run with `--judge gpt-5.5` (strongest, off-panel-identity) and compare under the
+   §6.4 regime. Test of the bottleneck hypothesis, but only meaningful once variance is controlled.
 2. **Plurality aggregator for objective tasks** — the ~94% majority-vote ceiling is a standing rebuke to pure synthesis;
    at minimum feed plurality to the judge as a strong prior it must justify overriding. (A product call: it bends the
-   deliberate "synthesis over selection" choice.)
-3. **Tool-matched verification** — test the verifier with an Anthropic api judge (code execution) on calc-bound items;
+   deliberate "synthesis over selection" choice.) Note even plurality has a floor — gpqa-33 had 2/3 panelists wrong.
+3. **Judge discrimination, not just identity** — gpqa-31 showed the anonymized judge still trusting a confident-wrong
+   answer at 0.96. Surface objective signals it can't fake (independent re-derivation via code, cross-checking) rather
+   than asking it to introspect on correctness.
+4. **Tool-matched verification** — test the verifier with an Anthropic api judge (code execution) on calc-bound items;
    the prompt now tells it to *recompute*, not re-reason.
-4. **Confidence calibration** — down-weight confident-but-wrong panelists (the item-18 / item-20 failure mode).
+5. **Confidence calibration** — down-weight confident-but-wrong panelists (the item-18 / item-20 / item-31 failure mode).
 
 The pipeline is sound and the diversity is real; the next gains are in *how the panel's collective knowledge is
 aggregated*, not in adding more pre-synthesis techniques.
