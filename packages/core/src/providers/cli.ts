@@ -37,7 +37,8 @@ interface CliSpec {
 }
 
 /**
- * Per-provider CLI wiring (grounded against the published packages).
+ * Per-provider CLI wiring (grounded against the published packages). Partial:
+ * providers without a subscription CLI (e.g. "openai-compatible") have no entry.
  *
  * Each spec pins `--model` to the registry's model string. Without it the CLI
  * runs the logged-in session's DEFAULT model, so a panelist declared as
@@ -45,7 +46,7 @@ interface CliSpec {
  * panelist and a benchmark baseline. The installed `claude`/`codex` CLIs accept
  * the registry strings (e.g. `claude --model claude-opus-4-8`) directly.
  */
-export const CLI_SPECS: Record<ProviderName, CliSpec> = {
+export const CLI_SPECS: Partial<Record<ProviderName, CliSpec>> = {
   anthropic: {
     bin: "claude",
     pkg: "@anthropic-ai/claude-code",
@@ -98,7 +99,9 @@ async function withBinLock<T>(bin: string, fn: () => Promise<T>): Promise<T> {
 
 /** True if the provider's CLI is resolvable on PATH. */
 export function cliAvailable(provider: ProviderName): boolean {
-  const { bin } = CLI_SPECS[provider];
+  const spec = CLI_SPECS[provider];
+  if (!spec) return false;
+  const { bin } = spec;
   try {
     execFileSync(process.platform === "win32" ? "where" : "which", [bin], {
       stdio: "ignore",
@@ -169,6 +172,9 @@ async function cliAttempt(
 ): Promise<CompletionResult> {
   const start = Date.now();
   const spec = CLI_SPECS[provider];
+  if (!spec) {
+    return { text: "", model: modelString, provider, latencyMs: Date.now() - start, error: `no subscription CLI for provider ${provider}` };
+  }
   const { bin } = spec;
   const prompt = foldPrompt(opts.messages);
   const inputTokensEst = estimateTokens(prompt);

@@ -12,6 +12,8 @@ const ENV_VAR: Record<ProviderName, string> = {
   anthropic: "ANTHROPIC_API_KEY",
   openai: "OPENAI_API_KEY",
   google: "GOOGLE_API_KEY",
+  // Default key env for OpenAI-compatible endpoints (override per-model via apiKeyEnv).
+  "openai-compatible": "BASETEN_API_KEY",
 };
 
 let loaded = false;

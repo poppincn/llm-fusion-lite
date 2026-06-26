@@ -214,6 +214,9 @@ export function apiKeyFor(provider: ProviderName): string | undefined {
       return process.env.OPENAI_API_KEY;
     case "google":
       return process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
+    case "openai-compatible":
+      // Per-model key (via ModelSpec.apiKeyEnv); BASETEN_API_KEY is the default.
+      return process.env.BASETEN_API_KEY;
   }
 }
 

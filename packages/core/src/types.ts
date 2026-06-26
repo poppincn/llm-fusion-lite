@@ -7,7 +7,7 @@ export interface ChatMessage {
   content: string;
 }
 
-export type ProviderName = "anthropic" | "openai" | "google";
+export type ProviderName = "anthropic" | "openai" | "google" | "openai-compatible";
 
 /**
  * How a provider authenticates and is invoked:
@@ -43,6 +43,17 @@ export interface ModelSpec {
   costPer1MOut?: number;
   /** Exclude from default adaptive panel selection (still callable explicitly). */
   excludeFromAuto?: boolean;
+  /**
+   * For provider "openai-compatible" only: the OpenAI-compatible Chat Completions
+   * base URL (e.g. Baseten/OpenRouter/vLLM). Lets you add models like GLM 5.2 or
+   * Minimax M3 without a bespoke provider.
+   */
+  baseURL?: string;
+  /**
+   * For provider "openai-compatible": the env var holding this endpoint's API key
+   * (default "BASETEN_API_KEY"). Per-model so several endpoints can coexist.
+   */
+  apiKeyEnv?: string;
 }
 
 export interface Citation {

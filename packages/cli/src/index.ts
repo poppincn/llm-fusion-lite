@@ -321,10 +321,10 @@ function onPath(cmd: string): boolean {
  * Mirrors CLI_SPECS in @era-fusion/core; kept here for the wizard's install +
  * version flows and the doctor readout (these need bin/pkg + login hints).
  */
-const PROVIDER_CLI: Record<
+const PROVIDER_CLI: Partial<Record<
   ProviderName,
   { bin: string; pkg: string; loginHint: string }
-> = {
+>> = {
   anthropic: { bin: "claude", pkg: "@anthropic-ai/claude-code", loginHint: "claude /login" },
   openai: { bin: "codex", pkg: "@openai/codex", loginHint: "codex login" },
   google: { bin: "gemini", pkg: "@google/gemini-cli", loginHint: "gemini" },
@@ -422,6 +422,7 @@ program
     for (const { name, label } of PROV_LABELS) {
       const mode = authModeFor(name, config);
       const cli = PROVIDER_CLI[name];
+      if (!cli) continue; // provider has no subscription CLI (e.g. openai-compatible)
       if (mode === "subscription") {
         const present = onPath(cli.bin);
         const ver = present ? cliVersion(cli.bin) : null;
@@ -556,6 +557,7 @@ function bail(): never {
 /** Argv to launch a provider's subscription login, derived from its hint. */
 function loginInvocation(prov: ProviderName): { bin: string; args: string[] } {
   const cli = PROVIDER_CLI[prov];
+  if (!cli) return { bin: prov, args: [] }; // no subscription CLI for this provider
   const parts = cli.loginHint.trim().split(/\s+/);
   return { bin: cli.bin, args: parts.slice(1) }; // hint starts with the bin name
 }
@@ -590,6 +592,10 @@ function runLoginInteractive(bin: string, args: string[]): boolean {
  */
 async function setupSubscription(prov: { name: ProviderName; label: string }): Promise<void> {
   const cli = PROVIDER_CLI[prov.name];
+  if (!cli) {
+    p.note(`${prov.label} has no subscription CLI; use API-key mode instead.`, "Not supported");
+    return;
+  }
 
   if (!cliAvailableOnPath(cli.bin)) {
     const doInstall = await p.confirm({
@@ -689,7 +695,7 @@ async function runSetupWizard(install: boolean): Promise<void> {
     const current =
       process.env[prov.env] || (prov.name === "google" ? process.env.GEMINI_API_KEY : "") || "";
     const cli = PROVIDER_CLI[prov.name];
-    const cliPresent = cliAvailableOnPath(cli.bin);
+    const cliPresent = cli ? cliAvailableOnPath(cli.bin) : false;
     const currentMode = authModeFor(prov.name);
 
     // Preselect the current/likely choice: configured subscription, an existing
@@ -706,7 +712,7 @@ async function runSetupWizard(install: boolean): Promise<void> {
               : "skip";
 
     const keyHint = current ? ` ${chalk.dim(`(key set: ${maskKey(current)})`)}` : "";
-    const cliHint = cliPresent ? ` ${chalk.dim(`(${cli.bin} present)`)}` : "";
+    const cliHint = cli && cliPresent ? ` ${chalk.dim(`(${cli.bin} present)`)}` : "";
     const choice = await p.select({
       message: `${prov.label} — how should it authenticate?`,
       options: [
