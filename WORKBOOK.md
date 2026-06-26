@@ -153,6 +153,12 @@ See [`HANDOVER.md`](HANDOVER.md) for the prioritized next steps and everything a
 
 ## 6. The course-correction (2026-06-24): a wrong model, a lucky slice, and the judge bottleneck
 
+> **⚠️ Read §6.6 first.** The accuracy numbers in §6.2–§6.3 were produced by a **broken MCQ grader** (it grabbed the first
+> A–H letter, including letters inside the reasoning). It differentially understated *verbose* answers — i.e. fusion's
+> synthesis far more than terse single-model answers. So "fusion loses to the best single" and "the judge destroys the
+> panel" are **likely grading artifacts**, not real effects. §6.6 documents the bug; the §7 clean-grader run is the
+> trustworthy comparison. The *mechanisms* in §6.1 (wrong model) and §6.4 (self-preference) still stand.
+
 This session set out to action §5's open list (tool-enabled verifier, CLI retry, ablation, larger run). Building those
 forced us to look harder at the harness — and what we found rewrote the story. The short version: **§5's win was an
 artifact of two bugs, and once they were fixed, the real bottleneck turned out to be the judge itself.**
@@ -269,3 +275,51 @@ add code execution, but there's no `ANTHROPIC_API_KEY` on this machine to prove 
 
 The pipeline is sound and the diversity is real; the next gains are in *how the panel's collective knowledge is
 aggregated*, not in adding more pre-synthesis techniques.
+
+### 6.6 The grader was broken — and it was differentially penalizing fusion
+
+Building the controlled judge experiment (§7), the first thing the new harness printed was a panel where *every* single
+model scored **90–94%** on GPQA-D — not the 37–62% the old harness had been reporting for the same models. That gap was
+the tell. The old grader (`run.mjs` `pickLetter`) took the **first** standalone A–H letter in the answer. On a terse
+"D" that's fine; on anything that reasons first — "**A** is a distractor, so the answer is C" — it grabs **A** and marks
+it wrong.
+
+Re-grading the 149 cached panel answers both ways:
+
+| Grader | Accuracy on identical answers |
+|---|---|
+| old — first A–H letter | 73.2% |
+| new — last `FINAL ANSWER: X` line | 92.6% |
+| **the two disagree on** | **23.5% of answers** |
+
+A ~19-point swing, disagreeing on nearly **one answer in four**. And the bias isn't uniform: terse single-model letters
+grade fine under both, but **verbose answers are mauled by first-letter grading** — which means **fusion's synthesis
+(always verbose) was penalized far more than the single-model baselines (often a bare letter).** That is exactly the
+asymmetry that would manufacture a fake "fusion < best single" result.
+
+So §6.2–§6.3 are retracted pending re-measurement: the headline "fusion doesn't beat frontier / the judge is the
+bottleneck" rested on a grader that couldn't read fusion's answers. What *survives* independent of grading: the model
+was running the wrong identity (§6.1, a process bug, fixed) and the judge saw model ids (§6.4, a real bias, fixed).
+The clean-grader, variance-controlled comparison is §7.
+
+**Lesson:** a benchmark number that's implausible in the *good* direction (frontier model "only" 37%) deserves the same
+suspicion as one that's implausibly good. The grader is part of the system under test.
+
+The fix: every system now ends with `FINAL ANSWER: <letter>` and is graded on that line (last occurrence). It's baked
+into the new `judge-eval.mjs` harness and should be backported to `run.mjs` for any future use.
+
+## 7. Controlled judge comparison (2026-06-26) — in progress
+
+The right way to ask "which model is the best judge" is a **paired** experiment, not randomization: randomizing the judge
+across runs where the panel *also* re-samples confounds judge quality with the dominant panel-noise (±6–12 pts). Instead
+(`scripts/bench/judge-eval.mjs`):
+
+1. **Snapshot** the panel once and cache it — GPQA-D 1–50, depth `standard`, panel = Opus 4.8 + GPT-5.5 + Gemini 3.5
+   Flash. Clean-grader baselines: **gpt-5.5 94% · opus 92% · gemini 90% · majority-vote 94%** (1 transient claude error).
+2. **Cross every judge** over the *identical* cached panels with k=3 repeated samples, so any gap is the judge. Judges:
+   the 4 in-house models now, with Baseten **GLM 5.2** and **Minimax M3** to be added via the new `openai-compatible`
+   provider (they re-use the same cache — cheap and directly comparable). Reported with bootstrap 95% CIs and paired
+   diffs vs the best judge.
+
+Result lands here when the run completes. The question is now sharp: **the panel ceiling is ~94% (majority-vote) — does
+any judge's synthesis match or beat it, or does synthesis cost accuracy versus a plain vote?**

@@ -67,11 +67,19 @@ function readJsonl(path) {
     });
 }
 
-/** Normalize an MCQ answer down to a choice letter when possible. */
+/**
+ * Normalize an MCQ answer down to a choice letter. Prefer an explicit
+ * "FINAL ANSWER: X" line, else the LAST standalone A–H letter (the committed
+ * answer), else a choice-text match. Taking the *first* letter (the old bug)
+ * grabbed letters out of the reasoning ("A is a distractor… answer is C" → A),
+ * which differentially understated verbose answers like fusion's synthesis.
+ */
 function pickLetter(text, choices) {
   const t = (text || "").trim();
-  const m = t.match(/\b([A-H])\b/); // first standalone letter
-  if (m) return m[1].toUpperCase();
+  const fa = [...t.matchAll(/final answer:\s*\(?([A-H])\)?/gi)];
+  if (fa.length) return fa[fa.length - 1][1].toUpperCase();
+  const all = [...t.matchAll(/\b([A-H])\b/g)];
+  if (all.length) return all[all.length - 1][1].toUpperCase();
   if (Array.isArray(choices)) {
     const idx = choices.findIndex((c) => t.toLowerCase().includes(String(c).toLowerCase()));
     if (idx >= 0) return String.fromCharCode(65 + idx);
