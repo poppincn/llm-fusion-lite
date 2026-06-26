@@ -20,16 +20,26 @@ for the visual pipeline. This doc is the operational get-started + what to do ne
 - **Benchmark (GPQA-D 11–18), pre-pinning:** `fusion-deep` 87.5% > base `fusion` 75% > best single 62.5%.
 - **Benchmark (GPQA-D 11–18), AFTER model-pinning fix** (`scripts/bench/data/out-pinned-11-18.json`): base `fusion` **87.5%** = `fusion-deep` **87.5%** > best single `gpt-5.5` **75%** > `gemini-3.5-flash` 50% > `claude-opus-4-8` 37.5%. **Pinning lifted base fusion (75→87.5) and the best single (62.5→75), erasing deep's apparent edge** (deep added +40% latency, 0 accuracy on this slice).
 
-### ⛔ RETRACTED (2026-06-26): the §judge-bottleneck numbers below were graded by a broken grader
+### ✅ RESOLVED (2026-06-26): broken grader caused a false "fusion loses"; clean run reverses it
 
-**Before trusting anything in this block:** the old harness (`run.mjs` `pickLetter`) graded MCQ by the **first** A–H
-letter in the answer, grabbing letters out of the reasoning ("**A** is a distractor… answer is C" → graded A). On the
-same cached answers, old grader = **73.2%** vs fixed grader = **92.6%** (disagree on **23.5%**). It penalizes *verbose*
-answers — i.e. **fusion's synthesis far more than terse single-model letters** — which would manufacture a fake "fusion <
-best single." With the clean grader, all three singles score **90–94%** on GPQA-D 1–50 (not the 37–62% below). So the
-"fusion doesn't beat frontier / judge is the bottleneck" conclusion is **suspended pending the clean-grader run**
-(`judge-eval.mjs`, in progress). What still stands: the model-pinning bug (process error, fixed) and judge
-self-preference (real, fixed). The block below is kept only as the record of how the artifact arose.
+The old harness (`run.mjs` `pickLetter`) graded MCQ by the **first** A–H letter, grabbing letters from the reasoning
+("**A** is a distractor… answer is C" → graded A). Same cached answers: old grader **73.2%** vs fixed **92.6%** (disagree
+**23.5%**), and it hits *verbose* answers (fusion synthesis ≫ terse singles) hardest. The clean-grader, paired,
+variance-controlled judge run (`judge-eval.mjs`, GPQA-D 1–50, k=3, `judges-50.json`) **reverses §6.2–6.3**:
+
+| Judge | Acc | 95% CI |
+|---|---|---|
+| claude-opus-4-8 | **96.0%** | [90, 100] |
+| gpt-5.5 | **96.0%** | [90, 100] |
+| gemini-3.5-flash | **95.3%** | [92, 99.3] |
+| gemini-2.5-pro | 87.3% | [76.7, 93.3] |
+
+Baselines: best single (gpt-5.5) **94%**, majority-vote **94%**. **So synthesis ≥ vote ≥ best single** (top judges 95–96%
+> 94%) — fusion is competitive with frontier; the "judge destroys the panel" claim was the grader. Also: **`gemini-2.5-pro`
+is a significantly worse judge** (−8.7 pts, paired CI excludes 0); the other three tie, and the *cheap* `gemini-3.5-flash`
+ties the frontier judges (cost-relevant for `defaultJudge`). Caveats: n=50, single panel snapshot, depth `standard`; top
+three are a statistical tie. The §6.1 (wrong model) and §6.4 (self-preference) *mechanism* fixes stand; only the §6.2–6.3
+*accuracy verdicts* were wrong. The block below is kept as the record of how the artifact arose.
 
 ### ~~KEY FINDING (2026-06-24): the judge is the bottleneck, and the n=8 win didn't hold~~ (see retraction above)
 

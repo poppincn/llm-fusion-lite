@@ -153,11 +153,12 @@ See [`HANDOVER.md`](HANDOVER.md) for the prioritized next steps and everything a
 
 ## 6. The course-correction (2026-06-24): a wrong model, a lucky slice, and the judge bottleneck
 
-> **⚠️ Read §6.6 first.** The accuracy numbers in §6.2–§6.3 were produced by a **broken MCQ grader** (it grabbed the first
-> A–H letter, including letters inside the reasoning). It differentially understated *verbose* answers — i.e. fusion's
-> synthesis far more than terse single-model answers. So "fusion loses to the best single" and "the judge destroys the
-> panel" are **likely grading artifacts**, not real effects. §6.6 documents the bug; the §7 clean-grader run is the
-> trustworthy comparison. The *mechanisms* in §6.1 (wrong model) and §6.4 (self-preference) still stand.
+> **⚠️ §6.2–§6.3 are RETRACTED — read §6.6 + §7.** Those accuracy numbers came from a **broken MCQ grader** (first A–H
+> letter, including letters inside the reasoning) that differentially understated *verbose* answers — fusion's synthesis
+> far more than terse single-model answers. The clean-grader controlled run (§7) **reverses the conclusion**: good judges
+> synthesize at **95–96%**, *above* the 94% majority-vote and best single, so synthesis adds value and fusion is
+> competitive with frontier. The *mechanisms* in §6.1 (wrong model) and §6.4 (self-preference) still stand; the
+> *accuracy verdicts* in §6.2–§6.3 do not.
 
 This session set out to action §5's open list (tool-enabled verifier, CLI retry, ablation, larger run). Building those
 forced us to look harder at the harness — and what we found rewrote the story. The short version: **§5's win was an
@@ -321,5 +322,36 @@ across runs where the panel *also* re-samples confounds judge quality with the d
    provider (they re-use the same cache — cheap and directly comparable). Reported with bootstrap 95% CIs and paired
    diffs vs the best judge.
 
-Result lands here when the run completes. The question is now sharp: **the panel ceiling is ~94% (majority-vote) — does
-any judge's synthesis match or beat it, or does synthesis cost accuracy versus a plain vote?**
+**Result (4 judges × 50 items × k=3, 0 judge errors, paired over identical cached panels):**
+
+| Judge | Accuracy | 95% CI | vs best judge (paired) |
+|---|---|---|---|
+| claude-opus-4-8 | **96.0%** | [90.0, 100.0] | — |
+| gpt-5.5 | **96.0%** | [90.0, 100.0] | +0.0 [0.0, 0.0] |
+| gemini-3.5-flash | **95.3%** | [92.0, 99.3] | −0.7 [−2.7, 2.7] |
+| gemini-2.5-pro | 87.3% | [76.7, 93.3] | **−8.7 [−18.0, −4.7]** (significant) |
+
+Baselines on the same cache: best single (gpt-5.5) **94%**, **majority-vote 94%**.
+
+Three things fall out, and they overturn §6.2–§6.3:
+
+1. **Synthesis beats voting — the "judge bottleneck" was the grader.** The top three judges synthesize at **95–96%**,
+   *above* the 94% majority-vote ceiling and above the best single (94%). So a good judge does *not* destroy the panel's
+   knowledge — it adds a little on top of a plain vote. The opposite §6.3 claim was an artifact of grading fusion's
+   verbose answers with a first-letter parser. **With correct grading, fusion matches/edges frontier rather than losing
+   to it.** (Edge is ~2 pts ≈ 1 item and inside the CIs, so the honest statement is "synthesis ≥ vote ≥ best single," not
+   a blowout.)
+2. **Judge choice is real and measurable.** `gemini-2.5-pro` is a **significantly worse** judge — −8.7 pts, paired CI
+   [−18.0, −4.7] excludes 0 — despite being a "pro" tier. The other three are statistically indistinguishable
+   (overlapping CIs, paired diff ≈ 0).
+3. **A cheap judge ties the frontier ones.** `gemini-3.5-flash` (95.3%) is within noise of Opus and GPT-5.5 (96%). You do
+   not need your most expensive model on the bench to get top-tier synthesis — a cost-relevant result for the default
+   `defaultJudge`.
+
+Caveats: n=50, one panel snapshot (k_panel=1), depth `standard` (no tools); the top three are a statistical tie, so
+"which of the three is best" needs more items. Bigger N and the Baseten judges (GLM 5.2, Minimax M3) re-use this cache.
+
+**Net:** the project's headline survives — *fusion synthesis is competitive with frontier and beats a plain vote* — once
+the model identity (§6.1), the judge's view of identity (§6.4), and above all the **grader (§6.6)** are fixed. The
+remaining lever is judge *discrimination* on the hardest items, where even a strong judge occasionally follows a
+confident-wrong panelist; that's a tooling/calibration problem, not a "synthesis is worthless" problem.
