@@ -128,6 +128,30 @@ fuse --panel gpt-5.5 "Say hello in one short sentence."
 fuse --panel gemini-3-pro "Say hello in one short sentence."
 ```
 
+### Adding an OpenAI-compatible model (Baseten / OpenRouter / vLLM / Together)
+
+Use `provider: "openai-compatible"` to register any endpoint that speaks the OpenAI **Chat Completions** API — e.g. open models like **GLM 5.2** or **Minimax M3** on Baseten. Each model carries its own `baseURL` and the env var holding its key (`apiKeyEnv`, default `BASETEN_API_KEY`). These work as panelists **and** as judges (great for the judge-comparison harness — see `scripts/bench/README.md`).
+
+```jsonc
+// in ~/.era-fusion/config.json → models[]
+{ "id": "glm-5.2", "provider": "openai-compatible", "model": "zai-org/GLM-5.2",
+  "label": "GLM 5.2", "baseURL": "https://inference.baseten.co/v1",
+  "apiKeyEnv": "BASETEN_API_KEY", "costPer1MIn": 0.5, "costPer1MOut": 1.5 },
+{ "id": "minimax-m3", "provider": "openai-compatible", "model": "MiniMaxAI/MiniMax-M3",
+  "label": "Minimax M3", "baseURL": "https://inference.baseten.co/v1",
+  "apiKeyEnv": "BASETEN_API_KEY", "costPer1MIn": 0.3, "costPer1MOut": 1.2 }
+```
+
+```bash
+# put the key in ~/.era-fusion/.env (or the real env):  BASETEN_API_KEY=...
+fuse --panel glm-5.2 "Say hello in one short sentence."          # smoke one model
+# use as a judge against cached panels (no panel re-run needed):
+node scripts/bench/judge-eval.mjs judges scripts/bench/data/panels-50.json \
+  --judges glm-5.2,minimax-m3,gpt-5.5 --k-judge 3
+```
+
+Notes: confirm the exact `model` slug + `baseURL` in your Baseten dashboard (dedicated deployments use a per-model URL like `https://model-xxxx.api.baseten.co/environments/production/sync/v1`). No native web search on this provider, so `depth` collapses to a single completion. `costPer1MIn/Out` make `fuse usage` report real $ for these metered models.
+
 ---
 
 ## 6. Validate end-to-end (live smoke test)

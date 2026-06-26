@@ -42,7 +42,11 @@ Mechanism (from captured per-item influence, all 4 fusion-losses on 19–34 had 
 **⚠️ Evaluation caveat (discovered validating the fix below):** re-running the **identical** 19–34 config twice moved *every*
 system ±6–12 pts (`out-anon-19-34.json` vs `out-pinned-19-34.json`) — subscription models are non-deterministic and
 re-answer each run. **Run-to-run variance on 16 items dwarfs the effects we're testing**, so single-slice A/Bs are
-unreliable. Fix evaluation first: 50+ items × repeated trials (plurality-graded), or accept only large deltas.
+unreliable. **Addressed:** `scripts/bench/judge-eval.mjs` now runs a paired design — `snapshot` caches the panel once,
+`judges` crosses every candidate judge over the *identical* cached panels with k repeated samples + bootstrap CIs. The
+strongest-judge question (fix #2) is tested there. A judge-comparison run over GPQA-D 1–50 is in progress
+(`scripts/bench/data/panels-50.json` → `judges-50.json`). New judges (incl. Baseten GLM 5.2 / Minimax M3 via the new
+`openai-compatible` provider) re-use the same cache — cheap + directly comparable.
 
 **Candidate fixes (need a decision — several touch the deliberate "synthesis over selection" design):**
 1. ✅ **DONE — Anonymize panelist identity in the judge.** `panelDigest`/priors/pairwise now show "Panelist N", contributions keyed by position → modelId. Removes self-preference; design-consistent. **But the validation run was inconclusive (variance, above) and gpqa-31 showed the anonymized judge STILL weighting a wrong panelist 0.96 — identity bias isn't the whole story; the judge can't discriminate correctness on hard items.** Kept (strictly correct, no downside) but not a proven accuracy win.

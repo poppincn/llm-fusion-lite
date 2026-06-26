@@ -37,6 +37,27 @@ node scripts/bench/run.mjs data.jsonl --depth deep \
 
 > The **tool-enabled verifier** (web search + code execution at `deep` depth) only engages when the judge runs in **api** mode — subscription CLIs ignore the depth/tool flags. To ablate it with tools live, pass an api-mode judge, e.g. `--judge gemini-2.5-pro`.
 
+## Judge comparison (paired, variance-controlled) — `judge-eval.mjs`
+
+`run.mjs` re-queries the panel every run, and those answers swing **±6–12 pts run-to-run** (subscription models are non-deterministic). That noise dwarfs the effect of swapping the judge, so comparing judges across separate `run.mjs` runs is unreliable. `judge-eval.mjs` fixes this with a **paired (blocked) design**:
+
+1. **`snapshot`** — query the panel once and **cache** the answers to disk.
+2. **`judges`** — cross **every** candidate judge over the **identical** cached panels, with `k` repeated judge samples. Panel noise is differenced out, so any accuracy gap is the judge (± judge sampling noise). The cache also yields each single model's and the panel's **majority-vote** accuracy for free.
+
+```bash
+# Phase 1 — snapshot 50 items once (reusable; the expensive part):
+node scripts/bench/judge-eval.mjs snapshot scripts/bench/data/gpqa_diamond.jsonl \
+  --panel claude-opus-4-8,gpt-5.5,gemini-3.5-flash --offset 0 --limit 50 \
+  --depth standard --k-panel 1 --out scripts/bench/data/panels-50.json
+
+# Phase 2 — cross judges over the cache (cheap; rerun anytime, add judges later):
+node scripts/bench/judge-eval.mjs judges scripts/bench/data/panels-50.json \
+  --judges claude-opus-4-8,gpt-5.5,gemini-2.5-pro,gemini-3.5-flash --k-judge 3 \
+  --out scripts/bench/data/judges-50.json
+```
+
+Output: per-judge accuracy with **bootstrap 95% CIs**, **paired diffs** vs the best judge (flags when a CI excludes 0 = significant), and the single-model / majority-vote baselines. Objective (letter-answer) datasets only — grading must be deterministic. Grading parses a `FINAL ANSWER: X` line (last occurrence) so verbose syntheses aren't mis-scored. **Add a judge later** (e.g. a Baseten model, see `docs/ENGINEER_ONBOARDING.md`) and just rerun Phase 2 against the same cache — directly comparable, no panel re-run.
+
 ## Dataset format (JSONL)
 
 ```jsonc
