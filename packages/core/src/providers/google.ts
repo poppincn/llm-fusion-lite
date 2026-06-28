@@ -7,6 +7,7 @@ import type {
 } from "../types.js";
 import { apiKeyFor, authModeFor } from "../config.js";
 import { cliAvailable, cliComplete } from "./cli.js";
+import { sandboxComplete } from "./sandbox.js";
 
 export class GoogleProvider implements Provider {
   name = "google" as const;
@@ -30,6 +31,9 @@ export class GoogleProvider implements Provider {
     modelString: string,
     opts: CompletionOptions,
   ): Promise<CompletionResult> {
+    if (opts.agentic) {
+      return sandboxComplete(this.name, modelString, opts);
+    }
     if (authModeFor(this.name) === "subscription") {
       return cliComplete(this.name, modelString, opts);
     }

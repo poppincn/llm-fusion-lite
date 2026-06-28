@@ -7,6 +7,7 @@ import type {
 } from "../types.js";
 import { apiKeyFor, authModeFor } from "../config.js";
 import { cliAvailable, cliComplete } from "./cli.js";
+import { sandboxComplete } from "./sandbox.js";
 
 /** Split ChatMessages into an Anthropic system string + user/assistant turns. */
 function splitMessages(messages: CompletionOptions["messages"]) {
@@ -42,6 +43,9 @@ export class AnthropicProvider implements Provider {
     modelString: string,
     opts: CompletionOptions,
   ): Promise<CompletionResult> {
+    if (opts.agentic) {
+      return sandboxComplete(this.name, modelString, opts);
+    }
     if (authModeFor(this.name) === "subscription") {
       return cliComplete(this.name, modelString, opts);
     }

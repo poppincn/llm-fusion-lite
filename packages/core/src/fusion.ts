@@ -134,6 +134,7 @@ export async function fuse(opts: FuseOptions, deps: FuseDeps = {}): Promise<Fusi
           maxTokens: opts.maxTokens,
           webSearch: webSearch && (spec.webSearch ?? false),
           depth,
+          agentic: opts.agentic,
           signal: opts.signal,
           onToken: (t) => emit({ type: "panel_token", modelId: spec.id, token: t }),
         });

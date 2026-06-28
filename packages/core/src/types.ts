@@ -74,6 +74,13 @@ export interface CompletionOptions {
   signal?: AbortSignal;
   /** Streaming token callback (best-effort; not every provider streams every block). */
   onToken?: (token: string) => void;
+  /**
+   * Run this call as a full tool-using AGENT inside the disposable sandbox
+   * container (bash/file/code-exec/web via the provider's CLI), instead of a
+   * plain completion. Only the CLI-backed providers support it. See
+   * docs/AGENTIC_FUSION.md.
+   */
+  agentic?: boolean;
 }
 
 /**
@@ -105,6 +112,8 @@ export interface CompletionResult {
   latencyMs: number;
   /** Set when the call failed; text will be empty. */
   error?: string;
+  /** Tools the agent invoked, when run in agentic mode (e.g. [{name:"Bash"}]). */
+  toolCalls?: { name: string }[];
 }
 
 export interface Provider {
@@ -226,4 +235,10 @@ export interface FuseOptions {
   signal?: AbortSignal;
   /** Skip writing to the adaptive store (e.g. for transient evals). */
   noLearn?: boolean;
+  /**
+   * Run panelists as tool-using agents in the sandbox container (see
+   * docs/AGENTIC_FUSION.md). CLI-backed providers only; others fall back to a
+   * normal completion.
+   */
+  agentic?: boolean;
 }
