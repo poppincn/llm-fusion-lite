@@ -13,7 +13,19 @@ Engine integration (`sandboxed-agent` mode) is next. Subscription-CLI auth needs
   the URL on your host browser). Persist it across `down` with a named volume on `~/.claude`/`~/.codex` (the image
   pre-chowns those dirs to the `agent` user so a fresh volume inherits write access — TODO when we add persistence).
 - **API-mode keys** are passed from `~/.era-fusion/.env` via `--env-file` (don't rely on the host shell env — the key
-  lives in the file). Gemini also needs `GEMINI_CLI_TRUST_WORKSPACE=true` to run tools headlessly in an untrusted dir.
+  lives in the file). Per-agent auth recipe (all validated — each ran a tool to compute SHA-256('fusion-era-2026')):
+  - **Claude** — reads `ANTHROPIC_API_KEY` directly. `claude -p --model … --permission-mode bypassPermissions
+    --output-format stream-json` → emits `tool_use` events (observable) + final result. ✅ used Bash, exact digest.
+  - **Gemini** — reads `GOOGLE_API_KEY`; needs `GEMINI_CLI_TRUST_WORKSPACE=true` + `--yolo` for headless tool use.
+    ✅ exact digest.
+  - **Codex** — does **not** read `OPENAI_API_KEY`; register once with `printenv OPENAI_API_KEY | codex login
+    --with-api-key` (done automatically by `run.sh up`). `codex exec` needs `--skip-git-repo-check` outside a repo and
+    `--sandbox workspace-write`. ✅ authenticated + executed tools — **but on the trivial hash it looped on web search
+    instead of running `sha256sum`** (a gpt-5.5 agentic tool-choice quirk; relevant to panelist reliability, not a
+    sandbox bug).
+- **Observation:** tool-using agents differ in *judgment*, not just capability — Claude/Gemini reached for the obvious
+  local shell; Codex over-reached to web search. The engine should capture each agent's tool calls (stream-json) so the
+  judge/influence can account for tool-choice quality, and consider per-model tool allow-lists.
 
 ## Why
 

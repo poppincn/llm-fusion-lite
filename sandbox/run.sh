@@ -42,6 +42,9 @@ case "${1:-}" in
     echo "Sandbox '$NAME' up. CLIs:"
     docker exec "$NAME" bash -lc 'claude --version; codex --version 2>/dev/null; python3 --version'
     [ -f "$ENV_FILE" ] && echo "Passed keys from $ENV_FILE" || echo "No $ENV_FILE — api-mode models need keys."
+    # claude/gemini read their env key directly; codex must register the key once
+    # (it defaults to ChatGPT OAuth and ignores OPENAI_API_KEY otherwise).
+    docker exec "$NAME" bash -lc 'if [ -n "$OPENAI_API_KEY" ]; then printenv OPENAI_API_KEY | codex login --with-api-key >/dev/null 2>&1 && echo "codex: API key registered"; fi'
     ;;
   login)
     need_docker
@@ -66,7 +69,7 @@ case "${1:-}" in
           | jq -rc 'if .type=="assistant" then (.message.content[]? | select(.type=="tool_use") | "TOOL_USE: "+.name) elif .type=="result" then "RESULT: "+(.result//"") else empty end'
         ;;
       codex)
-        docker exec "$NAME" bash -lc "mkdir -p /work/$RUNID && cd /work/$RUNID && codex exec --color never -m gpt-5.5 --sandbox workspace-write \"\$1\"" _ "$P"
+        docker exec "$NAME" bash -lc "mkdir -p /work/$RUNID && cd /work/$RUNID && codex exec --color never -m gpt-5.5 --skip-git-repo-check --sandbox workspace-write \"\$1\"" _ "$P" | tail -3
         ;;
     esac
     echo "--- a correct digest above = the agent executed a tool ---"
