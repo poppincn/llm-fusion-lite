@@ -153,6 +153,7 @@ export async function runJudgeAnalysis(
     subject?: string;
     priors?: JudgePrior[];
     pairwise?: Map<string, number>;
+    agentic?: boolean;
     signal?: AbortSignal;
   } = {},
 ): Promise<JudgeAnalysis> {
@@ -168,15 +169,23 @@ export async function runJudgeAnalysis(
           .map(([id, w]) => `- Panelist ${indexById.get(id)}: ${w.toFixed(2)}`)
           .join("\n")
       : "";
+  // In agentic mode the judge runs as a tool-using agent: it should INDEPENDENTLY
+  // verify each panelist's key claims (compute/search) rather than defer to the
+  // most confident-sounding answer — the failure mode where the panel holds the
+  // right answer but the judge picks a confident-wrong one.
+  const verifyClause = opts.agentic
+    ? `You have shell, code-execution, and web tools. Do NOT trust confident phrasing: independently CHECK each panelist's key quantitative/factual claims by running code or searching, and assign influence from what you verified, not from tone. `
+    : "";
   const res = await provider.complete(judge.model, {
     maxTokens: 4096,
     webSearch: false,
     depth: "light",
+    agentic: opts.agentic,
     signal: opts.signal,
     messages: [
       {
         role: "system",
-        content: `You are an impartial judge comparing answers from a panel of AI models to one user request. Produce a precise structured comparison. For each panelist, assess its INFLUENCE on the best possible final answer — how much its response should drive the synthesis (correctness, unique correct insight, coverage). ${ANALYSIS_SCHEMA_HINT}`,
+        content: `You are an impartial judge comparing answers from a panel of AI models to one user request. Produce a precise structured comparison. ${verifyClause}For each panelist, assess its INFLUENCE on the best possible final answer — how much its response should drive the synthesis (correctness, unique correct insight, coverage). ${ANALYSIS_SCHEMA_HINT}`,
       },
       {
         role: "user",
@@ -200,7 +209,7 @@ export async function runJudgeSynthesis(
   prompt: ChatMessage[],
   panel: PanelResponse[],
   analysis: JudgeAnalysis,
-  opts: { maxTokens?: number; onToken?: (t: string) => void; signal?: AbortSignal },
+  opts: { maxTokens?: number; agentic?: boolean; onToken?: (t: string) => void; signal?: AbortSignal },
 ): Promise<CompletionResult> {
   const provider = getProvider(judge.provider);
   const analysisBlock = [
@@ -217,17 +226,23 @@ export async function runJudgeSynthesis(
     .filter(Boolean)
     .join("\n\n");
 
+  const verifyClause = opts.agentic
+    ? " You have shell, code-execution, and web tools — where panelists disagree or make a quantitative/factual claim, INDEPENDENTLY recompute or look it up and let your own verified result decide, rather than following the more confident-sounding panelist."
+    : "";
   return provider.complete(judge.model, {
     maxTokens: opts.maxTokens ?? 8192,
     webSearch: false,
     depth: "light",
+    agentic: opts.agentic,
     signal: opts.signal,
     onToken: opts.onToken,
     messages: [
       {
         role: "system",
         content:
-          "You are a synthesizer. Multiple AI models answered the user's request, and a judge compared them. Write the single best possible final answer for the user, grounded in the strongest, correct material from the panel. Resolve contradictions in favor of the better-supported claim, incorporate unique correct insights, and fix gaps. Do not mention the panel, the models, or that this is a synthesis — just answer the user directly and excellently.",
+          "You are a synthesizer. Multiple AI models answered the user's request, and a judge compared them. Write the single best possible final answer for the user, grounded in the strongest, correct material from the panel. Resolve contradictions in favor of the better-supported claim, incorporate unique correct insights, and fix gaps." +
+          verifyClause +
+          " Do not mention the panel, the models, or that this is a synthesis — just answer the user directly and excellently.",
       },
       {
         role: "user",

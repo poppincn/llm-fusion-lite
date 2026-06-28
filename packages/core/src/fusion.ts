@@ -115,16 +115,25 @@ export async function fuse(opts: FuseOptions, deps: FuseDeps = {}): Promise<Fusi
       panel: panelSpecs.map((s) => ({ id: s.id, label: s.label })),
     });
 
-    // 3. Dispatch panel in parallel (optionally asking for self-confidence)
-    const panelMessages = tech.confidence
-      ? [
-          ...messages,
-          {
-            role: "system" as const,
-            content: 'End your answer with a final line exactly like "Confidence: 75%" — your calibrated confidence that it is correct.',
-          },
-        ]
-      : messages;
+    // 3. Dispatch panel in parallel (optionally asking for self-confidence).
+    // In agentic mode, nudge panelists to actually USE their tools — models
+    // otherwise reason quantitative/factual steps in their head and get them
+    // wrong (observed on GPQA-D calc items even with bash available).
+    const extraSys: ChatMessage[] = [];
+    if (opts.agentic) {
+      extraSys.push({
+        role: "system",
+        content:
+          "You are running as an agent with shell, code-execution, file, and web tools. For ANY quantitative step (arithmetic, formulas, unit/log conversions) WRITE AND RUN CODE to compute it exactly — never rely on mental math. For factual or current-information claims, verify with web search. Only commit to a final answer after checking its key steps with a tool.",
+      });
+    }
+    if (tech.confidence) {
+      extraSys.push({
+        role: "system",
+        content: 'End your answer with a final line exactly like "Confidence: 75%" — your calibrated confidence that it is correct.',
+      });
+    }
+    const panelMessages = extraSys.length ? [...messages, ...extraSys] : messages;
     let panel: PanelResponse[] = await Promise.all(
       panelSpecs.map(async (spec) => {
         emit({ type: "panel_start", modelId: spec.id, label: spec.label });
@@ -175,6 +184,7 @@ export async function fuse(opts: FuseOptions, deps: FuseDeps = {}): Promise<Fusi
       subject: category,
       priors,
       pairwise,
+      agentic: opts.agentic,
       signal: opts.signal,
     });
     emit({ type: "analysis", analysis });
@@ -191,7 +201,7 @@ export async function fuse(opts: FuseOptions, deps: FuseDeps = {}): Promise<Fusi
       emit({ type: "self_consistency", samples: tech.selfConsistency });
       const samples = await Promise.all(
         Array.from({ length: tech.selfConsistency }, () =>
-          runJudgeSynthesis(judge, messages, panel, analysis, { maxTokens: synthMaxTokens, signal: opts.signal }),
+          runJudgeSynthesis(judge, messages, panel, analysis, { maxTokens: synthMaxTokens, agentic: opts.agentic, signal: opts.signal }),
         ),
       );
       const idx = await selectConsistent(messages, samples.map((s) => s.text), judge, opts.signal);
@@ -203,6 +213,7 @@ export async function fuse(opts: FuseOptions, deps: FuseDeps = {}): Promise<Fusi
     } else {
       const synth = await runJudgeSynthesis(judge, messages, panel, analysis, {
         maxTokens: synthMaxTokens,
+        agentic: opts.agentic,
         signal: opts.signal,
         onToken: streamLive ? (t) => emit({ type: "answer_token", token: t }) : undefined,
       });
