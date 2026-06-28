@@ -55,6 +55,7 @@ program
   .option("-s, --size <n>", "panel size for adaptive selection", (v) => parseInt(v, 10))
   .option("-c, --category <name>", "force a category (skips classification)")
   .option("--no-web", "disable web search")
+  .option("--agentic", "run panelists as tool-using agents in the sandbox (needs `sandbox/run.sh up`)")
   .option("-q, --quiet", "only print the final answer (no panel progress)")
   .option("--json", "print the full FusionResult as JSON")
   .action(async (promptParts: string[], opts) => {
@@ -125,6 +126,7 @@ program
           panelSize: opts.size,
           category: opts.category,
           webSearch: opts.web,
+          agentic: opts.agentic,
           onEvent,
         },
         { config, store },

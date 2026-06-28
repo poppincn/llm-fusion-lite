@@ -1,8 +1,11 @@
 # Agentic Fusion — sandboxed tool-using panelists (design)
 
-**Status:** scaffold **validated** (2026-06-28). A Gemini agent in the sandbox autonomously ran a shell tool to compute a
-SHA-256 it couldn't know from memory and returned the exact digest — proving end-to-end tool execution in isolation.
-Engine integration (`sandboxed-agent` mode) is next. Subscription-CLI auth needs a one-time in-container login (below).
+**Status:** **working end-to-end** (2026-06-28). All three agent paths (Claude/Gemini/Codex) authenticate via API keys and
+execute tools in the sandbox, and the **engine integration is wired**: `fuse({agentic:true})` / `fuse --agentic` /
+`run.mjs --agentic` route panelists through the sandbox, capture their tool calls, and synthesize. Validated: agentic
+fusion computed `73^19` exactly (Claude panel used `Bash` — tool call captured; judge synthesized the 36-digit answer).
+Next: surface `toolCalls` in the UI/usage, A/B agentic-vs-not on tool-sensitive items, parse gemini/codex tool events,
+and phase-2 parity for api/Baseten models via a function-calling loop.
 
 ### Validated findings (from bring-up)
 - **Image works:** real Claude Code 2.1.195 + codex 0.142.3 + gemini-cli + python in one disposable container (2.6 GB).

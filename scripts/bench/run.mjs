@@ -22,7 +22,11 @@
  *                    fusion-pairwise · fusion-confidence · fusion-sc · fusion-verify
  *
  * Flags: --systems <csv>  --judge <id>  --offset <n>  --limit <n>  --panel <csv>
- *        --depth <light|standard|deep>  --out <file>  --dry-run
+ *        --depth <light|standard|deep>  --agentic  --out <file>  --dry-run
+ *
+ * --agentic runs fusion panelists as tool-using agents in the sandbox container
+ * (needs `sandbox/run.sh up`); A/B it against a non-agentic run on tool-sensitive
+ * items to measure the tool payoff. See docs/AGENTIC_FUSION.md.
  */
 import { readFileSync, writeFileSync } from "node:fs";
 import {
@@ -152,14 +156,14 @@ const FUSION_PRESETS = {
   "fusion-verify": { ...TECHNIQUES_OFF, verify: true },
 };
 
-async function runSystem(system, item, config, store, panel, depth) {
+async function runSystem(system, item, config, store, panel, depth, agentic) {
   const t0 = Date.now();
   if (system.startsWith("fusion")) {
     if (!(system in FUSION_PRESETS)) {
       return { answer: "", latencyMs: 0, costUsd: 0, error: `unknown fusion variant ${system} (try: ${Object.keys(FUSION_PRESETS).join(", ")})` };
     }
     const techniques = FUSION_PRESETS[system];
-    const r = await fuse({ prompt: item.prompt, panel, noLearn: true, techniques, depth }, { config, store });
+    const r = await fuse({ prompt: item.prompt, panel, noLearn: true, techniques, depth, agentic }, { config, store });
     return { answer: r.finalAnswer, latencyMs: Date.now() - t0, costUsd: r.usage.estCostUsd ?? 0, result: r };
   }
   const spec = getModel(config, system);
@@ -204,11 +208,12 @@ async function main() {
     console.error(`Invalid --depth ${depth} (expected light|standard|deep)`);
     process.exit(1);
   }
+  const agentic = !!args.agentic; // run fusion panelists as tool-using agents in the sandbox
   const judge = resolveJudge(config, args.judge);
 
   console.error(`Dataset: ${datasetPath} — ${items.length} items`);
   console.error(`Systems: ${systems.join(", ")}`);
-  console.error(`Judge:   ${judge.id}   |  available models: ${available.join(", ") || "none"}` + (depth ? `  |  depth=${depth}` : "") + `\n`);
+  console.error(`Judge:   ${judge.id}   |  available models: ${available.join(", ") || "none"}` + (depth ? `  |  depth=${depth}` : "") + (agentic ? `  |  AGENTIC` : "") + `\n`);
 
   if (args["dry-run"]) {
     const objective = items.filter((i) => i.answer != null).length;
@@ -225,7 +230,7 @@ async function main() {
     for (const sys of systems) {
       let res;
       try {
-        res = await runSystem(sys, item, config, store, panel, depth);
+        res = await runSystem(sys, item, config, store, panel, depth, agentic);
       } catch (e) {
         res = { answer: "", latencyMs: 0, costUsd: 0, error: e instanceof Error ? e.message : String(e) };
       }
