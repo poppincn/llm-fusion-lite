@@ -34,7 +34,7 @@ function foldPrompt(messages: CompletionOptions["messages"]): string {
 /** Build the in-container shell script (runs in a fresh workdir) + parser per provider. */
 function agentSpec(provider: ProviderName, model: string): {
   script: string;
-  parse: (stdout: string) => { text: string; toolCalls: { name: string }[] };
+  parse: (stdout: string) => { text: string; toolCalls: { name: string }[]; costUsd?: number };
 } | null {
   const runDir = `/work/run-${randomUUID()}`;
   const cd = `mkdir -p ${runDir} && cd ${runDir} &&`;
@@ -60,24 +60,26 @@ function agentSpec(provider: ProviderName, model: string): {
   }
 }
 
-/** Parse Claude Code stream-json: concatenate result text + collect tool_use names. */
-function parseClaudeStreamJson(stdout: string): { text: string; toolCalls: { name: string }[] } {
+/** Parse Claude Code stream-json: final text + tool_use names + real reported cost. */
+function parseClaudeStreamJson(stdout: string): { text: string; toolCalls: { name: string }[]; costUsd?: number } {
   const toolCalls: { name: string }[] = [];
   let text = "";
+  let costUsd: number | undefined;
   for (const line of stdout.split(/\r?\n/)) {
     const s = line.trim();
     if (!s.startsWith("{")) continue;
-    let obj: { type?: string; result?: string; message?: { content?: Array<{ type?: string; name?: string }> } };
+    let obj: { type?: string; result?: string; total_cost_usd?: number; message?: { content?: Array<{ type?: string; name?: string }> } };
     try { obj = JSON.parse(s); } catch { continue; }
     if (obj.type === "assistant" && Array.isArray(obj.message?.content)) {
       for (const block of obj.message!.content!) {
         if (block.type === "tool_use" && block.name) toolCalls.push({ name: block.name });
       }
-    } else if (obj.type === "result" && typeof obj.result === "string") {
-      text = obj.result;
+    } else if (obj.type === "result") {
+      if (typeof obj.result === "string") text = obj.result;
+      if (typeof obj.total_cost_usd === "number") costUsd = obj.total_cost_usd;
     }
   }
-  return { text: text.trim(), toolCalls };
+  return { text: text.trim(), toolCalls, costUsd };
 }
 
 /** True if the sandbox container is running. */
@@ -122,7 +124,7 @@ export function sandboxComplete(
       { timeout: AGENT_TIMEOUT_MS, maxBuffer: 64 * 1024 * 1024 },
       (err, stdout) => {
         const out = stdout ?? "";
-        const { text, toolCalls } = spec.parse(out);
+        const { text, toolCalls, costUsd } = spec.parse(out);
         if (!text) {
           done(fail(err ? `sandbox agent failed: ${err.message}` : "sandbox agent produced no answer"));
           return;
@@ -132,7 +134,7 @@ export function sandboxComplete(
         done({
           text, model: modelString, provider,
           usage: { inputTokens: est(prompt), outputTokens: est(text) },
-          toolCalls, latencyMs: Date.now() - start,
+          toolCalls, costUsd, latencyMs: Date.now() - start,
         });
       },
     );

@@ -114,6 +114,8 @@ export interface CompletionResult {
   error?: string;
   /** Tools the agent invoked, when run in agentic mode (e.g. [{name:"Bash"}]). */
   toolCalls?: { name: string }[];
+  /** Provider-reported real USD cost for this call, when available (e.g. agentic Claude). */
+  costUsd?: number;
 }
 
 export interface Provider {
