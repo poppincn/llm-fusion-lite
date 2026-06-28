@@ -90,6 +90,27 @@ tool-sensitive sets and an A/B: same items, `--agentic` on vs off, via the snaps
 chose: live research/current-events (web), quantitative/code (code-exec — e.g. the gpqa-18 calc class), coding/repo
 (file+bash in sandbox), while keeping closed-book reasoning as a control.
 
+## Findings: tools fix computation, not concepts (2026-06-28)
+
+A/B on **gpqa-18** (the calc item that defeated the non-agentic panel + tool-blind verifier):
+
+- **Non-agentic:** Claude reasoned in its head, picked **C** (wrong; gold A). Used no tools.
+- **Agentic, no nudge:** Claude *still* used no tools, picked C. (Agentic mode doesn't force tool use.)
+- **Agentic + Lever 1 (force-compute nudge):** Claude now used **Bash** ✅ — the nudge demonstrably changed behavior —
+  but still picked **C**.
+- **Agentic + Lever 1 + Lever 2 (tool-using judge, Claude *and* Gemini judge variants):** still **C**.
+
+**Conclusion:** gpqa-18's failure is **conceptual** (wrong physics setup), not arithmetic — so tool execution and
+independent re-computation can't fix it (the agent computed the *wrong formula* correctly). Contrast `73^19`, a pure
+*computational* task, where the same agentic path got it exactly right. **Agentic tools fix computation and lookup
+errors; they do not fix domain-reasoning errors.** gpqa-18 was the wrong item to prove tool value. To *measure* the
+levers, A/B on tool-sensitive items whose failure mode is computational/factual (not conceptual).
+
+Both levers are implemented and Lever 1 is verified to change behavior (Claude `tools=[-]` → `tools=[Bash]`). Cost: an
+agentic fusion item ran **~$0.06–0.09** (Opus agent dominant; rises when it actually executes tools). Open artifact: in
+the lever run the Gemini panelist's answer didn't parse to a letter (`pick=?`) — agentic gemini-cli output formatting to
+investigate.
+
 ## Open decisions
 
 1. **Isolation level:** Docker container (fast, good on macOS via its VM) now, with a path to gVisor/Firecracker for
