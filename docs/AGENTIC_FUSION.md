@@ -1,6 +1,19 @@
 # Agentic Fusion — sandboxed tool-using panelists (design)
 
-**Status:** design + scaffold (2026-06-28). Engine integration pending image validation.
+**Status:** scaffold **validated** (2026-06-28). A Gemini agent in the sandbox autonomously ran a shell tool to compute a
+SHA-256 it couldn't know from memory and returned the exact digest — proving end-to-end tool execution in isolation.
+Engine integration (`sandboxed-agent` mode) is next. Subscription-CLI auth needs a one-time in-container login (below).
+
+### Validated findings (from bring-up)
+- **Image works:** real Claude Code 2.1.195 + codex 0.142.3 + gemini-cli + python in one disposable container (2.6 GB).
+  Claude Code inits with `bypassPermissions` and the full tool suite (Bash/Read/Write/WebSearch/WebFetch) in `/work`.
+- **Don't mount creds read-only:** the CLIs need a writable `~/.claude` (`EROFS …mkdir session-env` otherwise).
+- **macOS subscription auth can't be mounted:** the OAuth token lives in the host **Keychain**, not `~/.claude.json`, so
+  file mounts don't carry it. Solution: `sandbox/run.sh login` runs the device-code OAuth *inside* the container (approve
+  the URL on your host browser). Persist it across `down` with a named volume on `~/.claude`/`~/.codex` (the image
+  pre-chowns those dirs to the `agent` user so a fresh volume inherits write access — TODO when we add persistence).
+- **API-mode keys** are passed from `~/.era-fusion/.env` via `--env-file` (don't rely on the host shell env — the key
+  lives in the file). Gemini also needs `GEMINI_CLI_TRUST_WORKSPACE=true` to run tools headlessly in an untrusted dir.
 
 ## Why
 
