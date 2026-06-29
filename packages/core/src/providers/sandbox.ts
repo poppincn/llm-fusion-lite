@@ -9,7 +9,7 @@
  * pre-registered there). This backend never throws — failures return a result
  * with `error` set, like cliComplete.
  */
-import { execFile } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import type { CompletionOptions, CompletionResult, ProviderName } from "../types.js";
 
@@ -117,14 +117,13 @@ export function execInSandbox(argv: string[], opts: { signal?: AbortSignal; time
   });
 }
 
-/** True if the sandbox container is running. */
+/** True if the sandbox container is running. (ESM-safe: uses the imported execFileSync.) */
 export function sandboxAvailable(): boolean {
   try {
-    const { execFileSync } = require("node:child_process") as typeof import("node:child_process");
     const out = execFileSync("docker", ["ps", "--filter", `name=^/${containerName()}$`, "--format", "{{.Names}}"], {
       stdio: ["ignore", "pipe", "ignore"],
     }).toString().trim();
-    return out === containerName();
+    return out.split(/\r?\n/).includes(containerName());
   } catch {
     return false;
   }

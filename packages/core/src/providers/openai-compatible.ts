@@ -45,7 +45,9 @@ export class OpenAICompatibleProvider implements Provider {
     const key = `${spec.baseURL}|${this.keyEnvOf(spec)}`;
     let c = this.clients.get(key);
     if (!c) {
-      c = new OpenAI({ baseURL: spec.baseURL, apiKey: process.env[this.keyEnvOf(spec)] });
+      // Bump retries: agentic loops fire several calls back-to-back and hosted
+      // open-model endpoints (Baseten) rate-limit; the SDK backs off on 429/5xx.
+      c = new OpenAI({ baseURL: spec.baseURL, apiKey: process.env[this.keyEnvOf(spec)], maxRetries: 5 });
       this.clients.set(key, c);
     }
     return c;
