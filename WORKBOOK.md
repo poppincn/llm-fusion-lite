@@ -329,7 +329,13 @@ across runs where the panel *also* re-samples confounds judge quality with the d
 | claude-opus-4-8 | **96.0%** | [90.0, 100.0] | — |
 | gpt-5.5 | **96.0%** | [90.0, 100.0] | +0.0 [0.0, 0.0] |
 | gemini-3.5-flash | **95.3%** | [92.0, 99.3] | −0.7 [−2.7, 2.7] |
+| **glm-5.2 (Baseten, open)** | **95.3%** | [88.7, 99.3] | −0.7 (added later over the same cache) |
 | gemini-2.5-pro | 87.3% | [76.7, 93.3] | **−8.7 [−18.0, −4.7]** (significant) |
+
+**An open model judges as well as frontier.** GLM-5.2 (added later via the new `openai-compatible` provider, scored over
+the *same cached panels* for ~$1.50 with no panel re-run) ties gemini-3.5-flash and is statistically indistinguishable
+from Opus/GPT-5.5 — and beats gemini-2.5-pro. Validates both the cheap-add-a-judge workflow and using a cheap open model
+as the default synthesizer.
 
 Baselines on the same cache: best single (gpt-5.5) **94%**, **majority-vote 94%**.
 
