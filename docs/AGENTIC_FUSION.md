@@ -125,6 +125,27 @@ gpqa-18 wasn't: when the failure mode is *computational*, the shared toolset is 
 (gpqa-18), tools don't help. Net characterization: **agentic tools fix computation and lookup, not domain reasoning** —
 so route quantitative/factual work through agents, and invest elsewhere (judge, panel quality) for reasoning.
 
+## Result: open models as tool-using agents (GLM via function-calling loop, 2026-06-28)
+
+`openai-compatible` models (no CLI agent) now run agentic via a function-calling loop (`agent-loop.ts`) wired to the
+SAME sandbox tools (`python`/`websearch`/`fetchurl`), executed in the container. Validated on GLM-5.2 (Baseten):
+
+| task type | tool-free | agentic | Δ | what the agent did |
+| --- | --- | --- | --- | --- |
+| **exact computation** (10 items) | 20% | **100%** | **+80** | called `python` every item |
+| **known facts** (6 items) | 100% | 100% | 0 | called `websearch` — but the model already knew them (not search-sensitive) |
+| **post-cutoff facts** (Super Bowl LX, AO 2026) | 0/2 ("TBD") | **2/2** | **+100%** | `websearch` → "Seattle Seahawks", "Carlos Alcaraz" |
+
+Full characterization of the shared toolset: **`python` rescues computation, `websearch`/`fetchurl` rescue
+current/unknown facts** — each a large lift where the failure matches the tool. No lift when the model already knows the
+answer, or when the failure is *conceptual* (gpqa-18). So agentic value is real and predictable: route quantitative and
+current-information work to agents.
+
+Notes: (1) a real bug fixed here — `sandboxAvailable()` used `require()`, which throws in ESM consumers (the .mjs
+bench/CLI), so the openai-compatible agentic path silently bailed everywhere except CJS `node -e` smokes; now ESM-safe.
+(2) Baseten GLM rate-limits at **120 req/min** — fine for sequential A/Bs (~3 calls/item) and the completed judge sweep,
+but larger *concurrent* agentic GLM runs need a concurrency cap in the harness (follow-up).
+
 ## Finding: subscription CLIs were never a tool-free baseline (2026-06-28)
 
 Running the exact-computation benchmark **non-agentically**, `claude-opus-4-8` scored **100%** — it cannot compute
