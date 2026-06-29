@@ -26,7 +26,7 @@ const release = {
   description:
     "LLM Fusion — multi-model synthesis with adaptive, learned per-subject model strengths. CLI + OpenAI-compatible server + web UI + /fuse skill.",
   type: "module",
-  bin: { fuse: "dist/fuse.js", "fuse-run": "dist/fuse-run.js" },
+  bin: { fuse: "dist/fuse.js", "fuse-run": "dist/fuse-run.js", "fuse-mcp": "dist/mcp.js" },
   files: ["dist", "public", "skills", "README.md"],
   engines: { node: ">=22" },
   dependencies: Object.fromEntries(Object.entries(dependencies).sort()),

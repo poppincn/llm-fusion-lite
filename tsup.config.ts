@@ -9,6 +9,7 @@ export default defineConfig({
   entry: {
     fuse: "packages/cli/src/index.ts",
     "fuse-run": "packages/cli/src/fuse-run.ts",
+    mcp: "packages/cli/src/mcp.ts",
   },
   outDir: "release/dist",
   format: ["esm"],
@@ -27,6 +28,8 @@ export default defineConfig({
     "commander",
     "chalk",
     "@clack/prompts",
+    "@modelcontextprotocol/sdk",
+    "zod",
     // newer Node builtin not in esbuild's known list — keep the node: prefix
     "node:sqlite",
   ],
