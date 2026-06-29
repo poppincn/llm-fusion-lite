@@ -1,6 +1,8 @@
 import OpenAI from "openai";
 import type { CompletionOptions, CompletionResult, ModelSpec, Provider } from "../types.js";
 import { loadConfig } from "../config.js";
+import { runOpenAIToolLoop } from "./agent-loop.js";
+import { sandboxAvailable } from "./sandbox.js";
 
 /**
  * Generic OpenAI-compatible Chat Completions provider — for any endpoint that
@@ -61,6 +63,19 @@ export class OpenAICompatibleProvider implements Provider {
     const messages = opts.messages.map((m) => ({ role: m.role, content: m.content }));
     const depth = opts.depth ?? "light";
     const maxTokens = opts.maxTokens ?? (depth === "deep" ? 16000 : depth === "standard" ? 6000 : 2048);
+
+    // Agentic: drive a function-calling loop with the same sandbox tools the CLI
+    // agents use (python/websearch/fetchurl). Requires the sandbox container.
+    if (opts.agentic) {
+      if (!sandboxAvailable()) return fail("agentic mode needs the sandbox container — run `sandbox/run.sh up`");
+      try {
+        const r = await runOpenAIToolLoop(this.clientFor(spec), modelString, messages, { maxTokens, signal: opts.signal });
+        if (r.text) opts.onToken?.(r.text);
+        return { text: r.text, model: modelString, provider: this.name, usage: r.usage, toolCalls: r.toolCalls, latencyMs: Date.now() - start };
+      } catch (err) {
+        return fail(err instanceof Error ? err.message : String(err));
+      }
+    }
 
     try {
       const stream = await this.clientFor(spec).chat.completions.create(

@@ -96,6 +96,27 @@ function parseClaudeStreamJson(stdout: string): { text: string; toolCalls: { nam
   return { text: text.trim(), toolCalls, costUsd };
 }
 
+/**
+ * Run a command inside the sandbox container and return its combined output
+ * (truncated). Used by the function-calling agent loop to execute model-requested
+ * tools (python/websearch/fetchurl) in isolation — never on the host. Never throws.
+ */
+export function execInSandbox(argv: string[], opts: { signal?: AbortSignal; timeoutMs?: number } = {}): Promise<string> {
+  return new Promise((resolve) => {
+    execFile(
+      "docker",
+      ["exec", "-w", "/work", containerName(), ...argv],
+      { timeout: opts.timeoutMs ?? 60_000, maxBuffer: 16 * 1024 * 1024, signal: opts.signal },
+      (err, stdout, stderr) => {
+        let out = (stdout ?? "").trim();
+        const e = (stderr ?? "").trim();
+        if (e) out += (out ? "\n" : "") + `[stderr] ${e}`;
+        resolve(out || (err ? `error: ${err.message}` : "(no output)"));
+      },
+    );
+  });
+}
+
 /** True if the sandbox container is running. */
 export function sandboxAvailable(): boolean {
   try {
