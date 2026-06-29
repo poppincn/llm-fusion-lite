@@ -124,7 +124,11 @@ export async function fuse(opts: FuseOptions, deps: FuseDeps = {}): Promise<Fusi
       extraSys.push({
         role: "system",
         content:
-          "You are running as an agent with shell, code-execution, file, and web tools. For ANY quantitative step (arithmetic, formulas, unit/log conversions) WRITE AND RUN CODE to compute it exactly — never rely on mental math. For factual or current-information claims, verify with web search. Only commit to a final answer after checking its key steps with a tool.",
+          "You are running as an agent in a sandbox with a shell. Ground EVERY claim with these preinstalled tools instead of relying on memory or mental math:\n" +
+          "- `python3` (numpy, scipy, sympy, mpmath) — compute any arithmetic/formula/unit-or-log conversion EXACTLY; never do multi-digit math in your head.\n" +
+          "- `websearch \"<query>\"` — web search for facts or current information.\n" +
+          "- `fetchurl <url>` — fetch a page's readable text to confirm a source.\n" +
+          "Actually run them. Only commit to a final answer after verifying its key quantitative and factual steps with a tool.",
       });
     }
     if (tech.confidence) {

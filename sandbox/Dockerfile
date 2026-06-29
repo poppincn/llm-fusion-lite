@@ -17,6 +17,14 @@ RUN npm install -g \
       @modelcontextprotocol/server-filesystem \
     && npm cache clean --force
 
+# Shared grounding toolset every panelist reaches via its shell: exact computation
+# (scientific Python) + keyless web search + URL fetch. Uniform across providers.
+RUN pip3 install --no-cache-dir --break-system-packages \
+      numpy scipy sympy mpmath \
+      ddgs requests beautifulsoup4 lxml readability-lxml
+COPY tools/websearch tools/fetchurl /usr/local/bin/
+RUN chmod +x /usr/local/bin/websearch /usr/local/bin/fetchurl
+
 # Non-root agent user; /work holds per-panelist run dirs, /cfg holds mounted config.
 RUN useradd -ms /bin/bash agent && mkdir -p /work /cfg && chown -R agent:agent /work /cfg
 USER agent

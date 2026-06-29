@@ -1,0 +1,34 @@
+#!/usr/bin/env python3
+"""Shared panelist tool: keyless web search. Usage: websearch <query...>
+Prints up to 6 results (title / url / snippet) so any agent can ground a claim."""
+import sys
+
+def main():
+    q = " ".join(sys.argv[1:]).strip()
+    if not q:
+        print("usage: websearch <query>", file=sys.stderr)
+        return 1
+    # Package was renamed duckduckgo_search -> ddgs; support both.
+    try:
+        from ddgs import DDGS
+    except Exception:
+        try:
+            from duckduckgo_search import DDGS
+        except Exception as e:
+            print(f"websearch: backend unavailable ({e})", file=sys.stderr)
+            return 2
+    try:
+        with DDGS() as d:
+            results = list(d.text(q, max_results=6))
+    except Exception as e:
+        print(f"websearch error: {e}", file=sys.stderr)
+        return 3
+    if not results:
+        print("(no results)")
+        return 0
+    for r in results:
+        print(f"- {r.get('title','')}\n  {r.get('href') or r.get('url','')}\n  {r.get('body') or r.get('snippet','')}\n")
+    return 0
+
+if __name__ == "__main__":
+    sys.exit(main())
