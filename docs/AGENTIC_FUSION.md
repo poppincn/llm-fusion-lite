@@ -111,6 +111,32 @@ agentic fusion item ran **~$0.06–0.09** (Opus agent dominant; rises when it ac
 the lever run the Gemini panelist's answer didn't parse to a letter (`pick=?`) — agentic gemini-cli output formatting to
 investigate.
 
+## Result: tools give a clean +30 pts on computational tasks (2026-06-28)
+
+The fair A/B (same genuinely-tool-free model, same items, tools the only variable) on the 10-item exact-computation set:
+
+| gemini-3.5-flash | accuracy | misses |
+| --- | --- | --- |
+| tool-free (api) | 70% | 89^17, 7^131 mod p, C(80,23) — the big-integer ones |
+| **agentic (sandbox)** | **100%** | none |
+
+**+30 pts, to a perfect score** — the agent ran `python3` to compute exactly what it failed mentally. This is the test
+gpqa-18 wasn't: when the failure mode is *computational*, the shared toolset is decisive; when it's *conceptual*
+(gpqa-18), tools don't help. Net characterization: **agentic tools fix computation and lookup, not domain reasoning** —
+so route quantitative/factual work through agents, and invest elsewhere (judge, panel quality) for reasoning.
+
+## Finding: subscription CLIs were never a tool-free baseline (2026-06-28)
+
+Running the exact-computation benchmark **non-agentically**, `claude-opus-4-8` scored **100%** — it cannot compute
+`89^17` or the 7000th prime from memory, so the host `claude` CLI **was using tools**. It is the full Claude Code agent
+with `--dangerously-skip-permissions`; even what the engine treats as a "plain completion" runs an agent loop with host
+bash. So **every prior benchmark that used subscription Claude/Codex panelists already had uncontrolled host-tool
+access** — it just rarely mattered on closed-book GPQA, and is invisible/unsandboxed. The only *genuinely* tool-free
+panelist on this setup is an **api-mode** model (e.g. Gemini api: **50%** on the same items). Implication: clean
+"tools-on vs tools-off" A/Bs must use api-mode models for the tool-free arm (or route everything through the sandbox so
+tool access is at least *controlled and observable*). It also strengthens the case for the sandbox: it turns this
+accidental host-tool access into deliberate, contained, uniform tooling.
+
 ## Open decisions
 
 1. **Isolation level:** Docker container (fast, good on macOS via its VM) now, with a path to gVisor/Firecracker for
