@@ -48,16 +48,30 @@ function agentSpec(provider: ProviderName, model: string): {
     case "openai":
       return {
         script: `${cd} codex exec --color never -m ${model} --skip-git-repo-check --sandbox workspace-write "$1"`,
-        parse: (out) => ({ text: out.trim(), toolCalls: [] }), // codex transcript; best-effort text
+        parse: (out) => ({ text: stripChrome(out), toolCalls: [] }), // codex transcript; best-effort text
       };
     case "google":
       return {
         script: `export GEMINI_API_KEY="\${GEMINI_API_KEY:-$GOOGLE_API_KEY}" GEMINI_CLI_TRUST_WORKSPACE=true; ${cd} gemini -m ${model} --yolo -p "$1"`,
-        parse: (out) => ({ text: out.trim(), toolCalls: [] }),
+        parse: (out) => ({ text: stripChrome(out), toolCalls: [] }),
       };
     default:
       return null; // openai-compatible (Baseten) has no CLI agent — caller falls back
   }
+}
+
+/**
+ * Defensively strip CLI chrome that can leak onto stdout (gemini-cli/codex emit
+ * most of it to stderr, but be robust). Gemini/codex give a plain final answer,
+ * not a structured stream, so we keep the meaningful lines and drop known noise.
+ */
+function stripChrome(out: string): string {
+  const noise = /^(YOLO mode|Both GOOGLE_API_KEY|Approval mode|Warning:|\[STARTUP\]|Loaded cached|Data collection|Using GOOGLE_API_KEY|warning:|Reading additional input|OpenAI Codex|tokens used|\d+ tokens|exec\b)/i;
+  return out
+    .split(/\r?\n/)
+    .filter((l) => !noise.test(l.trim()))
+    .join("\n")
+    .trim();
 }
 
 /** Parse Claude Code stream-json: final text + tool_use names + real reported cost. */
