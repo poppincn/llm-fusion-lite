@@ -5,6 +5,27 @@ import { runOpenAIToolLoop } from "./agent-loop.js";
 import { sandboxAvailable } from "./sandbox.js";
 
 /**
+ * Bound concurrent requests to hosted open-model endpoints, which rate-limit
+ * (e.g. Baseten GLM at 120 req/min). One permit per complete() call: agentic
+ * loops fire several requests internally but sequentially, so capping concurrent
+ * loops caps concurrent requests. Tune with ERA_FUSION_OAI_CONCURRENCY (default 4);
+ * combined with the SDK's retry/backoff this keeps large fan-outs under the limit.
+ */
+const MAX_CONCURRENCY = Math.max(1, Number(process.env.ERA_FUSION_OAI_CONCURRENCY) || 4);
+let active = 0;
+const waiters: Array<() => void> = [];
+function acquire(): Promise<void> {
+  return new Promise((resolve) => {
+    if (active < MAX_CONCURRENCY) { active++; resolve(); } else waiters.push(resolve);
+  });
+}
+function release(): void {
+  const next = waiters.shift();
+  if (next) next(); // hand the permit to the next waiter (active unchanged)
+  else active--;
+}
+
+/**
  * Generic OpenAI-compatible Chat Completions provider — for any endpoint that
  * speaks the OpenAI chat API (Baseten, OpenRouter, Together, vLLM, …). Unlike the
  * first-party `openai` provider (which uses the Responses API + hosted tools),
@@ -54,6 +75,15 @@ export class OpenAICompatibleProvider implements Provider {
   }
 
   async complete(modelString: string, opts: CompletionOptions): Promise<CompletionResult> {
+    await acquire();
+    try {
+      return await this.run(modelString, opts);
+    } finally {
+      release();
+    }
+  }
+
+  private async run(modelString: string, opts: CompletionOptions): Promise<CompletionResult> {
     const start = Date.now();
     const spec = this.specFor(modelString);
     const fail = (message: string): CompletionResult => ({
