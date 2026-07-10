@@ -2,8 +2,8 @@
 
 A running narrative of how this project was conceived, built, tested, researched, and improved.
 Newest results at the bottom. Companion docs: [`HANDOVER.md`](HANDOVER.md) (start here if you're
-taking over), [`docs/fusion-flow.html`](docs/fusion-flow.html) (visual pipeline),
-[`docs/ENGINEER_ONBOARDING.md`](docs/ENGINEER_ONBOARDING.md), [`docs/PUBLISHING.md`](docs/PUBLISHING.md).
+taking over), [`../fusion-flow.html`](../fusion-flow.html) (visual pipeline),
+[`../ENGINEER_ONBOARDING.md`](../ENGINEER_ONBOARDING.md), [`../PUBLISHING.md`](../PUBLISHING.md).
 
 ---
 
@@ -112,7 +112,7 @@ to our system, and built what the evidence supported:
 
 All six landed as **composable engine stages** (`packages/core/src/techniques.ts`, wired in `fusion.ts`, `99f52fb`),
 gated by a `TechniqueConfig` that depth tiers resolve: `standard` = base flow; `deep` (= `TECHNIQUES_DEEP`) turns
-everything on. We also produced a visual explainer (`docs/fusion-flow.html`, `9f9bb45`) clarifying synthesis-vs-selection.
+everything on. We also produced a visual explainer (`../fusion-flow.html`, `9f9bb45`) clarifying synthesis-vs-selection.
 
 ---
 

@@ -1,8 +1,31 @@
-# Era Fusion
+<div align="center">
 
-Multi-model **fusion** with adaptive, learned model strengths — a graphical chat UI, a CLI, an OpenAI-compatible endpoint, and a `/fuse` skill for agentic coding tools (Claude Code / OpenCode).
+# ⚡ Era Fusion
 
-Inspired by [OpenRouter's "Fusion beats Frontier"](https://openrouter.ai/blog/announcements/fusion-beats-frontier/) and the [`fusion-fable`](https://github.com/duolahypercho/fusion-fable) skill, with one big addition: **it learns which model is the de-facto subject-matter expert over time** and weights the synthesis accordingly.
+**Multi-model fusion with adaptive, learned model strengths.**
+
+Dispatch one prompt to a panel of frontier models in parallel, then have an
+influence-weighted judge synthesize a single best answer — and watch it learn
+which model is the de-facto expert on each subject over time.
+
+[![npm](https://img.shields.io/npm/v/@alexanderollman/llm-fusion?color=cb3837&logo=npm)](https://www.npmjs.com/package/@alexanderollman/llm-fusion)
+[![license](https://img.shields.io/badge/license-MIT-blue)](./LICENSE)
+[![node](https://img.shields.io/badge/node-%E2%89%A522-339933?logo=node.js&logoColor=white)](https://nodejs.org)
+[![CI](https://github.com/Alexander-Ollman/llm-fusion/actions/workflows/ci.yml/badge.svg)](https://github.com/Alexander-Ollman/llm-fusion/actions/workflows/ci.yml)
+
+**Graphical chat UI · CLI · OpenAI-compatible endpoint · `/fuse` skill for agentic coding tools**
+
+</div>
+
+---
+
+Inspired by [OpenRouter's "Fusion beats Frontier"](https://openrouter.ai/blog/announcements/fusion-beats-frontier/)
+and the [`fusion-fable`](https://github.com/duolahypercho/fusion-fable) skill, with one big
+addition: **it learns which model is the de-facto subject-matter expert over time** and
+weights the synthesis accordingly.
+
+Diversity is **harvested, not manufactured** — the same prompt to different models yields
+different reasoning paths, tool calls, and sources. No synthetic personas.
 
 ## How it works
 
@@ -28,7 +51,103 @@ request
                              Optional 👍/👎 feedback refines it further.
 ```
 
-Diversity is **harvested, not manufactured**: the same prompt to different models yields different reasoning paths, tool calls, and sources. No synthetic personas (those can be *derived* later from the learned SME profile).
+## Quick start
+
+```bash
+npm install -g @alexanderollman/llm-fusion   # Node ≥ 22
+fuse setup                                    # guided wizard: keys + defaults + /fuse skill
+fuse "What's the best way to design an idempotent webhook consumer?"
+```
+
+Prefer to run from source?
+
+```bash
+git clone https://github.com/Alexander-Ollman/llm-fusion && cd llm-fusion
+./scripts/install.sh     # installs deps, builds, puts `fuse`/`fuse-run` on PATH, installs the skill
+fuse setup
+fuse doctor              # verify environment
+```
+
+> Works out-of-the-box with **just an Anthropic key** (Opus 4.8 + Sonnet 4.6, judged by
+> Opus 4.8). Add OpenAI / Google keys for true cross-provider fusion. Run
+> `fuse doctor --probe` to confirm a model actually answers before relying on it.
+
+### Configuring providers
+
+`fuse setup` is the quickest path — a terminal wizard that, **per provider
+(Anthropic / OpenAI / Google), lets you choose an auth mode**:
+
+| Mode | What it does |
+|---|---|
+| **API key** | The provider's official SDK with a key (masked entry, written to `~/.era-fusion/.env`, mode `0600`). |
+| **Subscription login** | Calls the provider's CLI (`claude` / `codex` / `gemini`) as a subprocess using your logged-in Pro/Max plan — **no API key**. The wizard installs/updates the CLI and prints the login command. |
+| **Skip** | Leave that provider unconfigured. |
+
+Both modes feed the full engine (panel selection, two-phase judge, adaptive learning).
+Prefer env vars? `export ANTHROPIC_API_KEY=…` (at least one; OpenAI / Google optional).
+Re-run `fuse setup` anytime to change a mode; `fuse setup --skill-only` just (re)installs
+the skill.
+
+> **Subscription-mode limits:** CLI panelists report no token usage, so cost shows
+> **$0/unmetered**. CLIs are also less reliable at strict JSON — keep the judge on an
+> api/Anthropic model when you can.
+
+## Surfaces
+
+### CLI
+
+```bash
+fuse "explain CRDTs like I'm a backend engineer"
+echo "summarize this" | fuse --quiet                       # pipe-friendly, answer-only on stdout
+fuse --panel claude-opus-4-8,gpt-5.5,gemini-3-pro "compare these approaches"
+fuse --depth deep "research the current state of X"        # force agentic deep panelists
+fuse stats coding                                          # learned per-subject strengths
+fuse feedback <run-id> up                                  # teach it which answers were good
+```
+
+Full command set: `serve`, `setup`, `stats`, `usage`, `feedback`, `doctor`, `config`, `models`.
+
+### Web UI
+
+```bash
+fuse serve            # → http://localhost:8787  (chat · strengths · usage · setup)
+```
+
+Live panel view, streamed synthesis, an analysis panel, 👍/👎 feedback, and a
+learned-strengths dashboard. Dev mode: `npm run dev:server && npm run dev:web` (Vite
+proxies `/api` + `/v1`).
+
+### As a model (OpenAI-compatible)
+
+Point any OpenAI-compatible client (Claude Code / OpenCode / Cursor) at the server and
+use the model id `fusion`:
+
+```
+base URL:  http://localhost:8787/v1
+model:     fusion
+```
+
+Every request fans out to the panel and returns one synthesized answer. Non-standard body
+fields `panel`, `judge`, `panel_size`, `web_search` are honored. Each call feeds the
+adaptive store.
+
+### As a skill in Claude Code / OpenCode
+
+```
+/fuse <your request>
+```
+
+…or just say *"run this through fusion."* The skill is **service-first with CLI fallback**:
+with provider keys it runs the full engine (and learns); without keys it orchestrates the
+`claude` / `codex` / `gemini` CLIs directly — so fusion works even before any keys are set.
+
+## Adaptive learning
+
+Every run, the judge assigns each panelist an **influence** score (how much it drove the
+final answer). Those accumulate per `(model, subject)` into a quantitative expertise
+profile, viewable with `fuse stats` or the web dashboard. Selection uses it to field the
+strongest panel per subject; the judge uses it as a soft prior. Optional 👍/👎 feedback
+nudges scores further. Data lives in `~/.era-fusion/fusion.db`.
 
 ## Packages
 
@@ -36,76 +155,39 @@ Diversity is **harvested, not manufactured**: the same prompt to different model
 |---|---|
 | `@era-fusion/core` | The engine: provider abstraction (Anthropic / OpenAI / Google SDKs), adjudicator, panel dispatch, two-phase judge, SQLite adaptive store (`node:sqlite`, no native deps). |
 | `@era-fusion/server` | Hono server: OpenAI-compatible `/v1/chat/completions`, rich SSE `/api/fuse`, feedback + strengths API, serves the web UI. |
-| `@era-fusion/cli` | `fuse` — run fusions, `serve`, `setup` (guided key + skill wizard), `stats`, `usage`, `feedback`, `doctor`, `config`, `models`. Pipe-friendly. |
-| `@era-fusion/web` | React chat UI: live panel view, streamed synthesis, analysis panel, feedback, and a learned-strengths dashboard. |
+| `@era-fusion/cli` | `fuse` — run fusions, `serve`, `setup`, `stats`, `usage`, `feedback`, `doctor`, `config`, `models`. Pipe-friendly. |
+| `@era-fusion/web` | React chat UI: live panel view, streamed synthesis, analysis panel, feedback, learned-strengths dashboard. |
 | `skills/fuse` | The `/fuse` skill for Claude Code / OpenCode (service-first, CLI fallback). |
 
-## Setup
+## Requirements
 
-```bash
-git clone <this repo> && cd era-fusion
-./scripts/install.sh          # installs deps, builds, puts `fuse`/`fuse-run` on PATH,
-                              # installs the /fuse skill into Claude Code + OpenCode
-fuse setup                    # guided TUI: paste provider keys + pick defaults
-fuse doctor                   # verify environment
-```
+- **Node ≥ 22.** The adaptive store uses the built-in `node:sqlite` (no native deps). It is
+  stable on Node 24+; on Node 22 it is available but emits an experimental warning.
+- **Provider keys** — at least one of `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` /
+  `GOOGLE_API_KEY`, or a logged-in provider CLI for subscription mode.
+- **Docker** *(optional)* — only for the agentic **deep** tier's sandboxed code execution.
+  Fusion degrades gracefully without it.
 
-`fuse setup` is the quickest path: a terminal wizard that, **per provider (Anthropic / OpenAI / Google), lets you choose an auth mode** —
+## Documentation
 
-- **API key** — the provider's official SDK with a key (masked entry, written to `~/.era-fusion/.env`, mode `0600`).
-- **Subscription login** — call the provider's CLI (`claude` / `codex` / `gemini`) as a subprocess using your logged-in Pro/Max plan, **no API key**. The wizard installs/updates the CLI via `npm i -g` as needed and prints the login command to run (`claude /login` · `codex login` · `gemini`). Both modes feed the full engine (panel selection, two-phase judge, adaptive learning).
-- **Skip** — leave that provider unconfigured.
-
-It then lets you pick the default judge / panel size / web-search and installs the `/fuse` skill. Prefer env vars or the dashboard? `export ANTHROPIC_API_KEY=…` (at least one; OpenAI / Google optional) or `fuse serve` → Setup tab work too. Re-run `fuse setup` anytime to change a provider's mode or add a key; `fuse setup --skill-only` just (re)installs the skill.
-
-> **Subscription-mode limitations:** CLI panelists report no token usage, so cost metrics show **$0/unmetered** for them. If you set a subscription provider as the judge, its structured JSON output is best-effort (CLIs are less reliable at strict JSON) — keep the judge on an api/Anthropic model when possible.
-
-Works out-of-the-box with just an Anthropic key (Opus 4.8 + Sonnet 4.6, judged by Opus 4.8). Add OpenAI / Google keys for true cross-provider fusion. Edit `~/.era-fusion/config.json` to change models, panel size, judge, or the auto-panel.
-
-## Distribution (npm package)
-
-Ships as a single bundled **public npm package** — `@alexanderollman/llm-fusion` — exposing the `fuse` and `fuse-run` bins with the web UI and `/fuse` skill included (no native deps; Node ≥ 22). `npm i -g @alexanderollman/llm-fusion` (or `npx`), then `fuse setup` to wire the skill into your harnesses. era-code lazily provisions it on demand. Build from source with `npm run pack:release` (output in `./release`). See [`docs/PUBLISHING.md`](docs/PUBLISHING.md) for publishing + the era-code integration recipe, and [`docs/ENGINEER_ONBOARDING.md`](docs/ENGINEER_ONBOARDING.md) for first-time setup + connecting provider keys.
-
-## Usage
-
-### CLI
-```bash
-fuse "What's the best way to design an idempotent webhook consumer?"
-echo "summarize this" | fuse --quiet            # pipe-friendly, answer-only on stdout
-fuse --panel claude-opus-4-8,gpt-5.5,gemini-3-pro "compare these approaches"
-fuse --depth deep "research the current state of X"   # force agentic deep panelists
-fuse stats coding                                # learned per-subject strengths
-fuse feedback <run-id> up                        # teach it which answers were good
-```
-
-### Web UI
-```bash
-fuse serve            # → http://localhost:8787  (chat · strengths · usage · setup)
-# dev: npm run dev:server  &&  npm run dev:web   (Vite proxies /api + /v1)
-```
-
-### As a model in Claude Code / OpenCode / Cursor (OpenAI-compatible)
-Point any OpenAI-compatible client at the server and use the model id `fusion`:
-```
-base URL:  http://localhost:8787/v1
-model:     fusion
-```
-Every request fans out to the panel and returns one synthesized answer; non-standard body fields `panel`, `judge`, `panel_size`, `web_search` are honored. Each call feeds the adaptive store.
-
-### As a skill in Claude Code / OpenCode
-```
-/fuse <your request>
-```
-or just say "run this through fusion". The skill uses the `fuse` engine when any provider is configured — **api** (key set) or **subscription** (provider CLI on PATH via your Pro/Max plan) — with full learning, and falls back to orchestrating local model CLIs (`codex`, `gemini`, `claude`) directly when the engine isn't installed.
-
-## Adaptive learning
-
-Every run, the judge assigns each panelist an **influence** score (how much it drove the final answer). Those accumulate per `(model, subject)` into a quantitative expertise profile, viewable with `fuse stats` or the web dashboard. Selection uses it to field the strongest panel for each subject; the judge uses it as a soft prior. Optional 👍/👎 feedback nudges scores further. Data lives in `~/.era-fusion/fusion.db`.
+- [`docs/ENGINEER_ONBOARDING.md`](docs/ENGINEER_ONBOARDING.md) — first-time setup + connecting provider keys
+- [`docs/AGENTIC_FUSION.md`](docs/AGENTIC_FUSION.md) — the sandboxed agentic-panelist tier
+- [`docs/MCP.md`](docs/MCP.md) — Era Fusion as an MCP tool for any agentic stack
+- [`docs/PUBLISHING.md`](docs/PUBLISHING.md) — publishing the npm package + integration recipe
+- [`docs/fusion-flow.html`](docs/fusion-flow.html) — visual pipeline explainer
 
 ## Roadmap
-- **Multi-scope decomposition** — split a request into sub-scopes, each with its own cross-model panel, then meta-aggregate (data model already structured for it).
+
+- **Multi-scope decomposition** — split a request into sub-scopes, each with its own
+  cross-model panel, then meta-aggregate (data model already structured for it).
 - **Derived personas** — promote consistently dominant models into named subject experts.
 - Per-model cost/latency budgeting and richer dashboards.
 
+## Contributing
+
+Issues and PRs welcome. CI runs a typecheck + build on Node 22 and 24 — keep both green.
+Local check before pushing: `npm run build` (compiles every workspace with `tsc`).
+
 ## License
-MIT
+
+[MIT](./LICENSE) © Alexander Ollman

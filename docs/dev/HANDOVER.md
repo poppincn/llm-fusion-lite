@@ -5,7 +5,7 @@ panel of frontier models, has a judge **synthesize** one best answer, and **lear
 strengths over time**. Surfaces: OpenAI-compatible server + web dashboard, a `fuse` CLI, and a `/fuse`
 agentic skill. Published as the public npm package **`@alexanderollman/llm-fusion`**.
 
-Read [`WORKBOOK.md`](WORKBOOK.md) for the full story and the research rationale. Read [`docs/fusion-flow.html`](docs/fusion-flow.html)
+Read [`WORKBOOK.md`](WORKBOOK.md) for the full story and the research rationale. Read [`../fusion-flow.html`](../fusion-flow.html)
 for the visual pipeline. This doc is the operational get-started + what to do next.
 
 ---
@@ -165,15 +165,15 @@ node scripts/bench/run.mjs <data.jsonl> --dry-run   # validate, no API calls
 5. ✅ **DONE (root cause) — `claude -p` ran the wrong model.** Was the session default, not the declared model; now pinned via `--model`. Further depth tuning (think/effort triggers in the prompt) is still possible upside but the headline gap is closed.
 6. **Multi-scope decomposition (phase 2).** Adjudicator splits a request into sub-scopes, each its own cross-model panel, then a meta-aggregator. Data model already structured for it.
 7. **Derive personas from SME.** Once a model is consistently dominant in a subject, promote it into a named role — the "personas later" plan from the vision.
-8. **era-code provisioning + governance.** Wire the `provisionFusion()` step into `~/era-code` (recipe in `docs/PUBLISHING.md`); bootstrap `.era/memory` governance for this repo per house rules.
+8. **era-code provisioning + governance.** Wire the `provisionFusion()` step into `~/era-code` (recipe in `../PUBLISHING.md`); bootstrap `.era/memory` governance for this repo per house rules.
 
 ---
 
 ## Quick reference
 
-- Engine flow & techniques: `docs/fusion-flow.html`
-- Setup + provider keys: `docs/ENGINEER_ONBOARDING.md`
-- Publishing + era-code integration: `docs/PUBLISHING.md`
+- Engine flow & techniques: `../fusion-flow.html`
+- Setup + provider keys: `../ENGINEER_ONBOARDING.md`
+- Publishing + era-code integration: `../PUBLISHING.md`
 - Benchmark usage: `scripts/bench/README.md`
 - Full project narrative + research: `WORKBOOK.md`
 - **Security:** a Hugging Face token was shared in chat to fetch GPQA — it should be rotated; never commit keys (`.env`, `.era-fusion/`, `release/`, `scripts/bench/data/` are gitignored).
