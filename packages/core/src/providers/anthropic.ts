@@ -5,7 +5,9 @@ import type {
   CompletionResult,
   Provider,
 } from "../types.js";
-import { apiKeyFor } from "../config.js";
+import { apiKeyFor, authModeFor } from "../config.js";
+import { cliAvailable, cliComplete } from "./cli.js";
+import { sandboxComplete } from "./sandbox.js";
 
 /** Split ChatMessages into an Anthropic system string + user/assistant turns. */
 function splitMessages(messages: CompletionOptions["messages"]) {
@@ -25,7 +27,9 @@ export class AnthropicProvider implements Provider {
   private client: Anthropic | null = null;
 
   isConfigured(): boolean {
-    return !!apiKeyFor("anthropic");
+    return authModeFor(this.name) === "subscription"
+      ? cliAvailable(this.name)
+      : !!apiKeyFor(this.name);
   }
 
   private getClient(): Anthropic {
@@ -39,6 +43,12 @@ export class AnthropicProvider implements Provider {
     modelString: string,
     opts: CompletionOptions,
   ): Promise<CompletionResult> {
+    if (opts.agentic) {
+      return sandboxComplete(this.name, modelString, opts);
+    }
+    if (authModeFor(this.name) === "subscription") {
+      return cliComplete(this.name, modelString, opts);
+    }
     const start = Date.now();
     const { system, turns } = splitMessages(opts.messages);
     const depth = opts.depth ?? (opts.webSearch ? "standard" : "light");
@@ -66,6 +76,12 @@ export class AnthropicProvider implements Provider {
       if (system) params.system = system;
       if (tools.length) params.tools = tools;
       if (depth === "deep") params.thinking = { type: "adaptive" };
+      // Reasoning effort → output_config.effort (GA, no beta header). Effort is
+      // rejected on Haiku (and pre-4.6 Sonnet), so skip it there; every other
+      // registry model (Fable 5 / Opus 4.x / Sonnet 4.6) accepts low..max.
+      if (!/haiku/i.test(modelString)) {
+        params.output_config = { effort: opts.reasoningEffort ?? "high" };
+      }
 
       const stream = this.getClient().messages.stream(
         params as unknown as Parameters<Anthropic["messages"]["stream"]>[0],

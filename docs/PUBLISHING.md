@@ -1,4 +1,4 @@
-# Publishing `@alexander-ollman/llm-fusion` & wiring it into era-code
+# Publishing `@alexanderollman/llm-fusion` & wiring it into era-code
 
 LLM Fusion ships as a **single bundled, public npm package** exposing the `fuse` and `fuse-run` bins, with the web UI and `/fuse` skill assets included. era-code **lazily provisions** it (installs on demand, wires the skill) rather than hard-depending on it.
 
@@ -13,26 +13,26 @@ npm run pack:release        # → ./release  (bundled dist + public/ + skills/ +
 
 ## Publish to public npm
 
-The package is scoped `@alexander-ollman` and published publicly to the default npm registry. The scope must be an npm username or org you own — log in as / be a member of **`alexander-ollman`**.
+The package is scoped `@alexanderollman` and published publicly to the default npm registry. The scope must be an npm username or org you own — log in as / be a member of **`alexanderollman`**.
 
 ```bash
-npm login                 # as the alexander-ollman account (or an org member)
+npm login                 # as the alexanderollman account (or an org member)
 npm run pack:release
 (cd release && npm publish)   # publishConfig.access=public is already set
 ```
 
 Bump `version` in the root `package.json` before each publish (the release version is derived from it). To preview without publishing: `(cd release && npm pack --dry-run)`.
 
-> If the name `@alexander-ollman/llm-fusion` isn't available or you prefer an org later, change `name` in `scripts/gen-release-pkg.mjs` and rebuild.
+> If the name `@alexanderollman/llm-fusion` isn't available or you prefer an org later, change `name` in `scripts/gen-release-pkg.mjs` and rebuild.
 
 ## Consume it (era-code side)
 
 It's public — **no auth needed to install**:
 
 ```bash
-npm install -g @alexander-ollman/llm-fusion
+npm install -g @alexanderollman/llm-fusion
 # or run without installing:
-npx @alexander-ollman/llm-fusion doctor
+npx -p @alexanderollman/llm-fusion fuse doctor
 ```
 
 ### Lazy provisioning recipe for era-code
@@ -49,7 +49,7 @@ function hasFuse(): boolean {
 
 export function provisionFusion(): void {
   if (!hasFuse()) {
-    execSync("npm install -g @alexander-ollman/llm-fusion", { stdio: "inherit" });
+    execSync("npm install -g @alexanderollman/llm-fusion", { stdio: "inherit" });
   }
   execSync("fuse setup", { stdio: "inherit" });   // wire /fuse into Claude Code + OpenCode
   execSync("fuse doctor", { stdio: "inherit" });  // surface key/CLI readiness

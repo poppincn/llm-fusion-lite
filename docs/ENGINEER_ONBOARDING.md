@@ -2,7 +2,7 @@
 
 Handover for the era-code engineer bringing LLM Fusion online. Covers the two ways to initialize it and — the important part — connecting API keys for **all** model providers.
 
-> **Fastest path (era-code / production):** install the public `@alexander-ollman/llm-fusion` package → `fuse setup` → add provider keys → `fuse doctor` → confirm model IDs → `fuse "test"`. Keys and model config can be done either via files (`~/.era-fusion/.env` + `config.json`) **or** the served dashboard's **Setup** tab (`fuse serve`).
+> **Fastest path (era-code / production):** install the public `@alexanderollman/llm-fusion` package → `fuse setup` → add provider keys → `fuse doctor` → confirm model IDs → `fuse "test"`. Keys and model config can be done either via files (`~/.era-fusion/.env` + `config.json`) **or** the served dashboard's **Setup** tab (`fuse serve`).
 > **Dev path (contributing to the engine):** clone → `./scripts/install.sh` → same key + config steps.
 
 ---
@@ -27,17 +27,17 @@ Repo: `Alexander-Ollman/llm-fusion` (GitHub repo currently private; the **npm pa
 
 ### Path A — via the package (recommended for era-code / production)
 
-Distributed as a single bundled **public npm package**, **`@alexander-ollman/llm-fusion`**, exposing the `fuse` and `fuse-run` bins with the web UI and `/fuse` skill included. era-code **lazily provisions** it (installs on demand; not a hard dependency).
+Distributed as a single bundled **public npm package**, **`@alexanderollman/llm-fusion`**, exposing the `fuse` and `fuse-run` bins with the web UI and `/fuse` skill included. era-code **lazily provisions** it (installs on demand; not a hard dependency).
 
 1. **Install + wire the skill** (what era-code's provision step runs — public, no auth):
    ```bash
-   npm install -g @alexander-ollman/llm-fusion   # or `npx @alexander-ollman/llm-fusion doctor`
-   fuse setup                                     # installs /fuse into Claude Code + OpenCode
+   npm install -g @alexanderollman/llm-fusion   # or `npx -p @alexanderollman/llm-fusion fuse doctor`
+   fuse setup                                     # guided TUI: paste keys + defaults, installs /fuse
    fuse doctor                                    # verify keys / CLIs
    ```
    The lazy-provision recipe for era-code (idempotent `provisionFusion()`), and why it must **not** be a hard dependency, are in `docs/PUBLISHING.md`.
 
-2. To build + publish the artifact from source: `npm run pack:release` → `./release`, then `npm login` (as `alexander-ollman`) and `cd release && npm publish`. Details in `docs/PUBLISHING.md`.
+2. To build + publish the artifact from source: `npm run pack:release` → `./release`, then `npm login` (as `alexanderollman`) and `cd release && npm publish`. Details in `docs/PUBLISHING.md`.
 
 ### Path B — local dev / contributor
 
@@ -51,21 +51,27 @@ Either path creates `~/.era-fusion/` on first run: `config.json` (model registry
 
 ---
 
-## 4. Connect provider API keys  ← the important part
+## 4. Configure providers — API key or subscription  ← the important part
 
-The engine calls each provider with its **official SDK**, so each needs its own key.
+Each provider (Anthropic / OpenAI / Google) runs in one of **two auth modes**, chosen per provider in `fuse setup` (or in `~/.era-fusion/config.json` under `providerAuth`). Both modes flow through the **same engine** — panel selection, two-phase judge, adaptive learning — because everything goes through `Provider.complete()`.
 
-| Provider | Env var | Get a key | Powers (default panel) |
-|---|---|---|---|
-| Anthropic | `ANTHROPIC_API_KEY` | https://console.anthropic.com/ → API Keys | Claude Opus 4.8, Sonnet 4.6, Haiku 4.5 (Haiku = classifier/adjudicator); **default judge** |
-| OpenAI | `OPENAI_API_KEY` | https://platform.openai.com/api-keys | GPT panelist (Responses API + hosted web search) |
-| Google | `GOOGLE_API_KEY` (or `GEMINI_API_KEY`) | https://aistudio.google.com/apikey | Gemini panelists (Google Search grounding) |
+- **`api` (default)** — the provider's **official SDK** with an API key. Reports token usage and cost.
+- **`subscription`** — the provider's **CLI run as a subprocess** using your logged-in **Pro/Max plan**, **no API key**. `fuse setup` installs/updates the CLI via `npm i -g` as needed and prints the login command.
 
-**Minimum:** `ANTHROPIC_API_KEY` (runs + learns with an all-Claude panel). Add OpenAI + Google for true cross-provider fusion — the whole point.
+| Provider | api env var | subscription CLI (npm pkg) | subscription login | Powers (default panel) |
+|---|---|---|---|---|
+| Anthropic | `ANTHROPIC_API_KEY` (https://console.anthropic.com/) | `claude` (`@anthropic-ai/claude-code`) | `claude /login` | Claude Opus 4.8, Sonnet 4.6, Haiku 4.5 (Haiku = classifier/adjudicator); **default judge** |
+| OpenAI | `OPENAI_API_KEY` (https://platform.openai.com/api-keys) | `codex` (`@openai/codex`) | `codex login` | GPT panelist (Responses API + hosted web search in api mode) |
+| Google | `GOOGLE_API_KEY` / `GEMINI_API_KEY` (https://aistudio.google.com/apikey) | `gemini` (`@google/gemini-cli`) | `gemini` | Gemini panelists (Google Search grounding in api mode) |
+
+**Minimum:** any one provider configured (api **or** subscription). Add more for true cross-provider fusion — the whole point.
+
+**Subscription-mode limitations:** CLI calls report **no token usage**, so cost metrics show **$0/unmetered** for subscription panelists. If a subscription provider is the **judge**, its structured-JSON judge output is best-effort (CLIs are less reliable at strict JSON) — **keep the judge on an api/Anthropic model** when possible.
 
 ### How to set them (pick one)
 
-- **Recommended — machine-wide `.env`** (works from any directory):
+- **Easiest — `fuse setup` wizard:** a terminal TUI that, **per provider**, asks how to authenticate — **API key** (masked input → `~/.era-fusion/.env`, mode `0600`, applied live), **Subscription login** (installs/updates the provider CLI via `npm i -g` and prints the login command), or **Skip** — then lets you pick the default judge / panel size / web-search. Re-run anytime to change a provider's mode or add a key. Use `fuse setup --no-install` to skip the skill copy, or `fuse setup --skill-only` to only (re)install the skill.
+- **Machine-wide `.env`** (works from any directory):
   ```bash
   mkdir -p ~/.era-fusion
   cat > ~/.era-fusion/.env <<'EOF'
@@ -109,7 +115,10 @@ The default registry in `~/.era-fusion/config.json` ships **placeholder model st
   "classifierModel": "claude-haiku-4-5",   // cheap adjudicator (subject + depth)
   "panelSize": 3,
   "webSearch": true,
-  "explorationRate": 0.15
+  "explorationRate": 0.15,
+  // per-provider auth mode; absent provider ⇒ "api". Set "subscription" to use
+  // the provider's CLI (claude/codex/gemini) on your Pro/Max plan, no API key.
+  "providerAuth": { "anthropic": "api", "openai": "subscription" }
 }
 ```
 
@@ -118,6 +127,30 @@ Test a single provider/model (a one-model panel still runs the judge):
 fuse --panel gpt-5.5 "Say hello in one short sentence."
 fuse --panel gemini-3-pro "Say hello in one short sentence."
 ```
+
+### Adding an OpenAI-compatible model (Baseten / OpenRouter / vLLM / Together)
+
+Use `provider: "openai-compatible"` to register any endpoint that speaks the OpenAI **Chat Completions** API — e.g. open models like **GLM 5.2** or **Minimax M3** on Baseten. Each model carries its own `baseURL` and the env var holding its key (`apiKeyEnv`, default `BASETEN_API_KEY`). These work as panelists **and** as judges (great for the judge-comparison harness — see `scripts/bench/README.md`).
+
+```jsonc
+// in ~/.era-fusion/config.json → models[]
+{ "id": "glm-5.2", "provider": "openai-compatible", "model": "zai-org/GLM-5.2",
+  "label": "GLM 5.2", "baseURL": "https://inference.baseten.co/v1",
+  "apiKeyEnv": "BASETEN_API_KEY", "costPer1MIn": 0.5, "costPer1MOut": 1.5 },
+{ "id": "minimax-m3", "provider": "openai-compatible", "model": "MiniMaxAI/MiniMax-M3",
+  "label": "Minimax M3", "baseURL": "https://inference.baseten.co/v1",
+  "apiKeyEnv": "BASETEN_API_KEY", "costPer1MIn": 0.3, "costPer1MOut": 1.2 }
+```
+
+```bash
+# put the key in ~/.era-fusion/.env (or the real env):  BASETEN_API_KEY=...
+fuse --panel glm-5.2 "Say hello in one short sentence."          # smoke one model
+# use as a judge against cached panels (no panel re-run needed):
+node scripts/bench/judge-eval.mjs judges scripts/bench/data/panels-50.json \
+  --judges glm-5.2,minimax-m3,gpt-5.5 --k-judge 3
+```
+
+Notes: confirm the exact `model` slug + `baseURL` in your Baseten dashboard (dedicated deployments use a per-model URL like `https://model-xxxx.api.baseten.co/environments/production/sync/v1`). No native web search on this provider, so `depth` collapses to a single completion. `costPer1MIn/Out` make `fuse usage` report real $ for these metered models.
 
 ---
 
@@ -173,7 +206,7 @@ curl -s localhost:8787/v1/chat/completions -H 'content-type: application/json' \
 | `doctor` shows a key ○ despite being set | It's in a `.env` that isn't loaded — use `~/.era-fusion/.env` or `./.env`, or `export` it. Real env wins over `.env`. |
 | "No usable models" / 404 from a provider | `models[].model` doesn't match your access — fix it (§5). |
 | 401 / authentication error | Bad/rotated key, or wrong env var (Google accepts `GOOGLE_API_KEY` or `GEMINI_API_KEY`). |
-| `npm install -g @alexander-ollman/llm-fusion` fails | It's public — no auth to install. If publishing, ensure you're `npm login`'d as the `alexander-ollman` scope owner (`docs/PUBLISHING.md`). |
+| `npm install -g @alexanderollman/llm-fusion` fails | It's public — no auth to install. If publishing, ensure you're `npm login`'d as the `alexanderollman` scope owner (`docs/PUBLISHING.md`). |
 | `node:sqlite` / "Cannot find package 'sqlite'" | Node < 22, or an old bundle — upgrade Node ≥ 22 and rebuild (`npm run pack:release`). |
 | Panelist errors but the run still completes | By design — a failed panelist is reported, gets 0 influence, the judge uses the rest. |
 | No citations on web-searched answers | Provider returned grounding in a shape the extractor didn't match; verify the model supports the hosted web tool. Best-effort + provider-specific. |
@@ -198,7 +231,7 @@ curl -s localhost:8787/v1/chat/completions -H 'content-type: application/json' \
 ## 11. Known gaps / open items
 
 - Non-Anthropic default model IDs are **placeholders** — expect to do §5 (or use the dashboard **Setup** tab) before OpenAI/Google panelists work.
-- Publishing requires `npm login` as the `@alexander-ollman` scope owner; the package is public on install (`docs/PUBLISHING.md`).
+- Publishing requires `npm login` as the `@alexanderollman` scope owner; the package is public on install (`docs/PUBLISHING.md`).
 - Provider citation/usage extraction is best-effort against current SDK response shapes — verify on first live runs.
 - No live API call has been run yet (no keys in the build environment); first run may surface a model-ID or response-shape tweak.
 - Repo has no `.era/memory` governance (constitution/directives) bootstrapped — do that per house rules before substantive changes.

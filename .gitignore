@@ -12,3 +12,28 @@ packages/web/dist/
 packages/server/public/
 # publishable bundle output
 release/
+# benchmark result artifacts
+bench-*.json
+# benchmark datasets (gated/large)
+scripts/bench/data/
+
+# Era - Generated files (do not edit this section)
+.era/memory/DIRECTIVES.md
+.era/memory/.directives-build-hash
+.era/.toolconfig
+.era/config.local.yaml
+.era/governance.local.yaml
+.opencode/agent
+.opencode/command
+.opencode/skill
+.opencode/plugin
+.claude/agents
+.claude/commands
+.claude/skills
+.claude/era-shared
+.claude/settings.json
+.mcp.json
+.codex/config.toml
+.era/memory/handovers/
+.era/runtime/
+# Era - End

@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Era Fusion — How the flow works</title>
+<style>
+  :root {
+    --bg: #0e1116; --panel: #161b22; --panel2: #1c2230; --line: #2b3340;
+    --text: #e6edf3; --muted: #9aa7b4; --accent: #2dd4bf; --accent2: #818cf8;
+    --good: #34d399; --warn: #fbbf24; --bad: #f87171; --opus:#c084fc; --gpt:#34d399; --gem:#60a5fa;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 40px 24px 80px; }
+  h1 { font-size: 30px; margin: 0 0 6px; letter-spacing: -0.5px; }
+  h2 { font-size: 20px; margin: 48px 0 16px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+  h3 { font-size: 15px; margin: 0 0 6px; }
+  p { color: var(--text); }
+  .sub { color: var(--muted); margin: 0 0 8px; }
+  .muted { color: var(--muted); }
+  code { background: #0b0e13; border: 1px solid var(--line); border-radius: 5px; padding: 1px 6px; font-size: 13px; color: #cbd5e1; }
+  .pill { display:inline-block; font-size: 11px; padding: 2px 9px; border-radius: 999px; border:1px solid var(--line); color: var(--muted); }
+
+  /* flow diagram */
+  .flow { display: flex; flex-direction: column; align-items: center; gap: 0; margin: 8px 0; }
+  .node { width: 100%; max-width: 640px; background: var(--panel); border: 1px solid var(--line);
+    border-radius: 12px; padding: 14px 18px; position: relative; }
+  .node .n-title { font-weight: 600; display:flex; align-items:center; gap:8px; }
+  .node .n-desc { color: var(--muted); font-size: 13px; margin-top: 4px; }
+  .num { width: 22px; height: 22px; border-radius: 50%; background: var(--accent); color:#062c28;
+    font-size: 12px; font-weight: 700; display:inline-flex; align-items:center; justify-content:center; }
+  .arrow { width: 2px; height: 26px; background: linear-gradient(var(--accent), var(--accent2)); margin: 0; }
+  .arrow.small { height: 18px; }
+  .arrowhead { color: var(--accent2); margin-top:-6px; font-size: 14px; line-height: 1; }
+
+  .panelrow { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; width: 100%; max-width: 640px; }
+  .pcard { background: var(--panel2); border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
+  .pcard .name { font-weight: 600; font-size: 13px; }
+  .pcard .role { font-size: 11px; color: var(--muted); }
+  .dot { width:8px; height:8px; border-radius:50%; display:inline-block; margin-right:6px; }
+
+  .judge { width: 100%; max-width: 640px; background: linear-gradient(180deg,#1a2030,#161b22);
+    border: 1px solid #2f3a4e; border-radius: 12px; padding: 0; overflow: hidden; }
+  .judge .head { padding: 12px 18px; border-bottom: 1px solid var(--line); font-weight: 600; }
+  .phase { padding: 12px 18px; border-bottom: 1px solid var(--line); }
+  .phase:last-child { border-bottom: none; }
+  .phase .tag { font-size: 11px; color: var(--accent2); font-weight: 700; letter-spacing: .04em; }
+  .chips { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+  .chip { font-size: 11px; padding: 2px 8px; border-radius: 6px; background:#0b0e13; border:1px solid var(--line); color:#cbd5e1; }
+
+  .loop { max-width: 640px; width:100%; margin-top: 10px; border:1px dashed #3a4a63; border-radius:10px;
+    padding:10px 14px; color: var(--muted); font-size: 13px; background: rgba(129,140,248,0.05); }
+
+  table { width:100%; border-collapse: collapse; margin-top: 10px; font-size: 13.5px; }
+  th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+  .have { color: var(--good); font-weight:600; }
+  .partial { color: var(--warn); font-weight:600; }
+  .missing { color: var(--bad); font-weight:600; }
+  .callout { background: var(--panel); border:1px solid var(--line); border-left: 3px solid var(--accent);
+    border-radius: 8px; padding: 14px 18px; margin: 14px 0; }
+  .callout.bad { border-left-color: var(--bad); }
+  .grid2 { display:grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 680px){ .grid2 { grid-template-columns: 1fr; } .panelrow{ grid-template-columns:1fr; } }
+  ul { margin: 6px 0; padding-left: 20px; } li { margin: 3px 0; }
+  a { color: var(--accent); }
+  .src { font-size: 12.5px; color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Era&nbsp;Fusion — how the flow actually works</h1>
+  <p class="sub">One request → a panel of models → an influence-weighted judge that <b>synthesizes</b> (does not just pick) → a learned-over-time answer. <span class="pill">v0.1</span></p>
+
+  <div class="callout">
+    <b>The short version:</b> it is <b>not</b> "all three answer and the judge picks the best." The judge writes a
+    <b>brand-new answer</b> built from the strongest <i>correct</i> material across every panelist — resolving their
+    disagreements, keeping insights only one model had, and filling gaps none covered well. Selection is the floor; we do generative synthesis.
+  </div>
+
+  <h2>The pipeline</h2>
+  <div class="flow">
+
+    <div class="node">
+      <div class="n-title"><span class="num">1</span> Request</div>
+      <div class="n-desc">The user's prompt (chat, CLI, OpenAI-compatible endpoint, or the <code>/fuse</code> skill).</div>
+    </div>
+    <div class="arrow"></div><div class="arrowhead">▼</div>
+
+    <div class="node">
+      <div class="n-title"><span class="num">2</span> Adjudicate <span class="pill">fast model</span></div>
+      <div class="n-desc">A cheap classifier reads the request and decides the <b>subject</b> (coding, math, research…) and the
+        <b>depth</b> it deserves: <code>light</code> (one shot) · <code>standard</code> (+ web search) · <code>deep</code> (agentic: web + tools).</div>
+    </div>
+    <div class="arrow"></div><div class="arrowhead">▼</div>
+
+    <div class="node">
+      <div class="n-title"><span class="num">3</span> Select panel <span class="pill">adaptive</span></div>
+      <div class="n-desc">Picks the strongest models <i>for this subject</i> using learned per-subject expertise (SME),
+        with ε-greedy exploration so under-tried models still get a shot. Distinct models per scope.</div>
+    </div>
+    <div class="arrow"></div><div class="arrowhead">▼</div>
+
+    <div class="node" style="background:transparent;border:none;padding:0;">
+      <div class="n-desc" style="text-align:center;margin-bottom:8px;">
+        <span class="num" style="background:var(--accent2);color:#0b0e13;">4</span>
+        &nbsp;<b>Panel fan-out</b> — the <u>same</u> prompt to every model, <b>in parallel</b>, each answering <i>independently</i> (diversity is harvested, not scripted)
+      </div>
+      <div class="panelrow">
+        <div class="pcard"><div class="name"><span class="dot" style="background:var(--opus)"></span>Claude Opus 4.8</div><div class="role">independent answer + tools (by depth)</div></div>
+        <div class="pcard"><div class="name"><span class="dot" style="background:var(--gpt)"></span>GPT-5.5</div><div class="role">independent answer + tools (by depth)</div></div>
+        <div class="pcard"><div class="name"><span class="dot" style="background:var(--gem)"></span>Gemini 3.5 Flash</div><div class="role">independent answer + tools (by depth)</div></div>
+      </div>
+    </div>
+    <div class="arrow"></div><div class="arrowhead">▼</div>
+
+    <div class="judge">
+      <div class="head">⚖️ &nbsp;<span class="num" style="background:var(--accent2);color:#0b0e13;">5</span>&nbsp; The Judge — two phases (not a vote)</div>
+      <div class="phase">
+        <div class="tag">PHASE A · COMPARATIVE ANALYSIS</div>
+        <div class="n-desc">Reads every panelist answer and produces a structured comparison — <b>plus a per-model influence
+          score</b>, informed by a soft prior from learned subject expertise.</div>
+        <div class="chips">
+          <span class="chip">consensus</span><span class="chip">contradictions</span><span class="chip">gaps</span>
+          <span class="chip">unique insights</span><span class="chip">influence 0–1 / model</span>
+        </div>
+      </div>
+      <div class="phase">
+        <div class="tag">PHASE B · GENERATIVE SYNTHESIS &nbsp;(streamed)</div>
+        <div class="n-desc">Writes the <b>single best answer</b>, grounded in Phase A: resolve each contradiction toward the
+          better-supported claim, incorporate the correct unique insights, fix the gaps. The output is a new composition —
+          often better than any individual answer, not a copy of one.</div>
+      </div>
+    </div>
+    <div class="arrow"></div><div class="arrowhead">▼</div>
+
+    <div class="node">
+      <div class="n-title"><span class="num">6</span> Final answer</div>
+      <div class="n-desc">Returned to the user (streamed). The run — panel responses, influence scores, usage — is persisted.</div>
+    </div>
+
+    <div class="loop">↻ <b>Learn:</b> the judge's influence scores accumulate into per-model, per-subject expertise (SME); optional 👍/👎 refines it.
+      Next time the same subject comes up, step&nbsp;3 fields a stronger panel and step&nbsp;5 carries a better prior. <i>This is what Sakana Fugu and OpenRouter Fusion don't do at inference.</i></div>
+  </div>
+
+  <h2>"Isn't it just: three answers → judge picks one?" — No.</h2>
+  <div class="grid2">
+    <div class="callout bad" style="border-left-color:var(--bad)">
+      <h3>❌ Selection (what people assume)</h3>
+      <p class="muted">Rank the 3 answers, return the top one verbatim. Capped at the <i>best single answer present</i>.
+        If every model missed one piece, the final answer misses it too.</p>
+    </div>
+    <div class="callout">
+      <h3>✅ Synthesis (what we do)</h3>
+      <p class="muted">A new answer assembled from the best <i>parts</i> of all of them, with disagreements resolved and gaps
+        filled. Can exceed every individual answer. <b>Evidence:</b> on GPQA-Diamond items where Opus-as-judge answered
+        <i>wrong on its own</i>, fusion still answered <i>right</i> — it deferred to the better-supported panelists rather than to itself.</p>
+    </div>
+  </div>
+
+  <h2>Can we be more optimal? Yes — the research landscape</h2>
+  <p class="sub">We're currently a solid <b>single-layer generative fusion</b> (the MoA "aggregator" / LLM-Blender "GenFuser" family). The documented gains come from <b>iteration, ranking, and verification</b> on top.</p>
+
+  <table>
+    <thead><tr><th>Technique</th><th>What it adds beyond what we do</th><th>Cost</th><th>Status here</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><b>Mixture-of-Agents</b><br><span class="muted">layers / peer-visible refine</span></td>
+        <td>Panelists currently answer <b>blind</b>. MoA runs 2–3 <b>layers</b>: each model sees the others' answers and
+          <b>revises</b> before final aggregation. The biggest documented lift (+8.2% vs GPT-4o on AlpacaEval).</td>
+        <td>2–3×</td>
+        <td class="missing">missing</td>
+      </tr>
+      <tr>
+        <td><b>Pairwise ranking</b><br><span class="muted">LLM-Blender · PairRanker</span></td>
+        <td>Instead of one-pass influence scores, do head-to-head pairwise comparisons to rank candidates more reliably, then fuse the top-K.</td>
+        <td>+(N²) small calls</td>
+        <td class="partial">partial<br><span class="muted">(single-pass influence)</span></td>
+      </tr>
+      <tr>
+        <td><b>Debate / critique round</b></td>
+        <td>We already detect <b>contradictions</b> — send <i>only</i> those contested points back to the panel to defend/refute, then re-synthesize. Targeted &amp; cheaper than full MoA layers.</td>
+        <td>+1 round</td>
+        <td class="missing">missing</td>
+      </tr>
+      <tr>
+        <td><b>Verification pass</b><br><span class="muted">Self-Refine / Reflexion</span></td>
+        <td>After synthesis, a verifier checks the answer (sanity/consistency; <i>execute</i> for code, <i>recompute</i> for math) and triggers one revision if it fails.</td>
+        <td>+1 call</td>
+        <td class="missing">missing</td>
+      </tr>
+      <tr>
+        <td><b>Self-consistency</b><br><span class="muted">sample &amp; vote</span></td>
+        <td>For objective tasks, sample the answer N× and majority-vote. <b>Self-MoA caveat:</b> N× of the single best model
+          sometimes beats a diverse panel — worth A/B-ing our "harvested diversity" assumption per subject.</td>
+        <td>N×</td>
+        <td class="missing">missing</td>
+      </tr>
+      <tr>
+        <td><b>Confidence weighting</b></td>
+        <td>Each panelist emits a calibrated confidence; weight the synthesis by confidence × learned SME.</td>
+        <td>~free</td>
+        <td class="missing">missing</td>
+      </tr>
+      <tr>
+        <td><b>Learned routing</b><br><span class="muted">Fugu-style</span></td>
+        <td>Decide per-query whether to fan out at all, which models, and how many — to cut the always-N× cost.</td>
+        <td>saves cost</td>
+        <td class="partial">partial<br><span class="muted">(adjudicator picks depth + adaptive panel)</span></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>Proposed roadmap for era-fusion</h2>
+  <p class="sub">Wire these to the existing <b>depth tiers</b> so cost scales with what the question deserves:</p>
+  <ul>
+    <li><b><code>standard</code></b> — keep today's flow (fan-out → analyze → synthesize). Already strong.</li>
+    <li><b><code>deep</code></b> — add <b>one MoA refinement layer</b> (panelists see each other's first answers and revise) <b>+ a verification pass</b> (execute code / recheck math / consistency). Biggest expected quality lift.</li>
+    <li><b>cross-cutting</b> — add a <b>debate round on detected contradictions only</b> (cheap, targets exactly where models disagree) and <b>confidence weighting</b> in the judge prior.</li>
+    <li><b>measure it</b> — every change goes through <code>scripts/bench/run.mjs</code> (GPQA-Diamond, objective grading) so "more optimal" is proven, not assumed — comparing fusion vs best/avg single and vs judge-solo.</li>
+  </ul>
+
+  <h2>Sources</h2>
+  <p class="src">
+    Mixture-of-Agents — <a href="https://arxiv.org/abs/2406.04692">arXiv:2406.04692</a> ·
+    Rethinking MoA / Self-MoA — <a href="https://arxiv.org/abs/2502.00674">arXiv:2502.00674</a> ·
+    LLM-Blender (PairRanker + GenFuser) — <a href="https://aclanthology.org/2023.acl-long.792/">ACL 2023</a> ·
+    "When Agents Disagree: the Selection Bottleneck" — <a href="https://arxiv.org/pdf/2603.20324">arXiv:2603.20324</a> ·
+    Sakana Fugu — <a href="https://sakana.ai/fugu/">sakana.ai/fugu</a>
+  </p>
+
+</div>
+</body>
+</html>

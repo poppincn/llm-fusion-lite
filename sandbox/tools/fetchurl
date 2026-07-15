@@ -1,0 +1,37 @@
+#!/usr/bin/env python3
+"""Shared panelist tool: fetch a URL and print its readable text.
+Usage: fetchurl <url>   (truncated to ~8k chars)."""
+import sys
+
+def main():
+    if len(sys.argv) < 2 or not sys.argv[1].strip():
+        print("usage: fetchurl <url>", file=sys.stderr)
+        return 1
+    url = sys.argv[1].strip()
+    try:
+        import requests
+    except Exception as e:
+        print(f"fetchurl: backend unavailable ({e})", file=sys.stderr)
+        return 2
+    try:
+        html = requests.get(url, timeout=20, headers={"User-Agent": "Mozilla/5.0 (era-fusion sandbox)"}).text
+    except Exception as e:
+        print(f"fetchurl error: {e}", file=sys.stderr)
+        return 3
+    text = html
+    try:
+        from readability import Document
+        from bs4 import BeautifulSoup
+        text = BeautifulSoup(Document(html).summary(), "lxml").get_text("\n", strip=True)
+    except Exception:
+        # fall back to a crude tag strip
+        try:
+            from bs4 import BeautifulSoup
+            text = BeautifulSoup(html, "lxml").get_text("\n", strip=True)
+        except Exception:
+            pass
+    print(text[:8000])
+    return 0
+
+if __name__ == "__main__":
+    sys.exit(main())

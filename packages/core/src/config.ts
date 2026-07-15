@@ -2,7 +2,27 @@
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import type { ModelSpec, ProviderName } from "./types.js";
+import type { Depth, ModelSpec, ProviderAuthMode, ProviderName, TechniqueConfig } from "./types.js";
+
+/** Base pipeline only: fan-out → synthesize. No extra techniques. */
+export const TECHNIQUES_OFF: TechniqueConfig = {
+  refineRounds: 0,
+  debate: false,
+  pairwiseRank: false,
+  confidence: false,
+  selfConsistency: 1,
+  verify: false,
+};
+
+/** Everything on — used for the `deep` tier and the benchmark's max-quality run. */
+export const TECHNIQUES_DEEP: TechniqueConfig = {
+  refineRounds: 1,
+  debate: true,
+  pairwiseRank: true,
+  confidence: true,
+  selfConsistency: 2,
+  verify: true,
+};
 
 export interface FusionConfig {
   /** All models the engine knows about. */
@@ -21,6 +41,27 @@ export interface FusionConfig {
   explorationRate: number;
   /** Category taxonomy used by the classifier. */
   categories: string[];
+  /**
+   * Per-provider auth mode. Absent provider ⇒ "api" (SDK + key). Set a provider
+   * to "subscription" to call its CLI (claude / codex / gemini) instead.
+   */
+  providerAuth?: Partial<Record<ProviderName, ProviderAuthMode>>;
+  /** Default optional techniques (when depth doesn't dictate otherwise). */
+  techniques?: TechniqueConfig;
+}
+
+/**
+ * Resolve effective techniques: explicit override wins; else `deep` depth turns
+ * everything on; else the config default (or off).
+ */
+export function resolveTechniques(
+  override: Partial<TechniqueConfig> | undefined,
+  depth: Depth,
+  config: FusionConfig,
+): TechniqueConfig {
+  const base: TechniqueConfig =
+    depth === "deep" ? TECHNIQUES_DEEP : config.techniques ?? TECHNIQUES_OFF;
+  return override ? { ...base, ...override } : base;
 }
 
 export const DEFAULT_CATEGORIES = [
@@ -41,6 +82,17 @@ export const DEFAULT_CATEGORIES = [
  * `model` strings in your config.json to match models you have access to.
  */
 export const DEFAULT_MODELS: ModelSpec[] = [
+  {
+    id: "claude-fable-5",
+    provider: "anthropic",
+    model: "claude-fable-5",
+    label: "Claude Fable 5",
+    webSearch: true,
+    costPer1MIn: 10,
+    costPer1MOut: 50,
+    // Anthropic's most capable model. Thinking is always on; depth is controlled
+    // via reasoningEffort (output_config.effort). Defaults to "high".
+  },
   {
     id: "claude-opus-4-8",
     provider: "anthropic",
@@ -70,24 +122,36 @@ export const DEFAULT_MODELS: ModelSpec[] = [
     // used as the classifier; usable as a panelist too
   },
   {
+    id: "gpt-5.6-sol",
+    provider: "openai",
+    model: "gpt-5.6-sol",
+    label: "GPT-5.6 (Sol)",
+    webSearch: true,
+    // OpenAI's GPT-5.6 "Sol" — frontier tier of the sol/terra/luna family.
+    // Reasoning effort → reasoning.effort.
+  },
+  {
     id: "gpt-5.5",
     provider: "openai",
     model: "gpt-5.5",
     label: "GPT-5.5",
     webSearch: true,
   },
+  // Default to broadly-available GA Gemini IDs (gemini-3-* 404 on standard keys).
+  // Bump `model` to a gemini-3 string if your key has access. Run `fuse doctor --probe`
+  // to verify a model actually answers before relying on it.
   {
-    id: "gemini-3-pro",
+    id: "gemini-2.5-pro",
     provider: "google",
-    model: "gemini-3-pro",
-    label: "Gemini 3 Pro",
+    model: "gemini-2.5-pro",
+    label: "Gemini 2.5 Pro",
     webSearch: true,
   },
   {
-    id: "gemini-3-flash",
+    id: "gemini-3.5-flash",
     provider: "google",
-    model: "gemini-3-flash",
-    label: "Gemini 3 Flash",
+    model: "gemini-3.5-flash",
+    label: "Gemini 3.5 Flash",
     webSearch: true,
   },
 ];
@@ -95,11 +159,13 @@ export const DEFAULT_MODELS: ModelSpec[] = [
 export const DEFAULT_CONFIG: FusionConfig = {
   models: DEFAULT_MODELS,
   autoPanel: [
+    "claude-fable-5",
     "claude-opus-4-8",
     "claude-sonnet-4-6",
+    "gpt-5.6-sol",
     "gpt-5.5",
-    "gemini-3-pro",
-    "gemini-3-flash",
+    "gemini-2.5-pro",
+    "gemini-3.5-flash",
   ],
   defaultJudge: "claude-opus-4-8",
   classifierModel: "claude-haiku-4-5",
@@ -107,6 +173,7 @@ export const DEFAULT_CONFIG: FusionConfig = {
   webSearch: true,
   explorationRate: 0.15,
   categories: DEFAULT_CATEGORIES,
+  providerAuth: {},
 };
 
 export function fusionHome(): string {
@@ -169,5 +236,26 @@ export function apiKeyFor(provider: ProviderName): string | undefined {
       return process.env.OPENAI_API_KEY;
     case "google":
       return process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
+    case "openai-compatible":
+      // Per-model key (via ModelSpec.apiKeyEnv); BASETEN_API_KEY is the default.
+      return process.env.BASETEN_API_KEY;
   }
+}
+
+/** Resolve a provider's auth mode (defaults to "api" when unset). */
+export function authModeFor(
+  provider: ProviderName,
+  config?: FusionConfig,
+): ProviderAuthMode {
+  return (config ?? loadConfig()).providerAuth?.[provider] ?? "api";
+}
+
+/** Persist a provider's auth mode to config.json. */
+export function setProviderAuthMode(
+  provider: ProviderName,
+  mode: ProviderAuthMode,
+): void {
+  const config = loadConfig();
+  const providerAuth = { ...(config.providerAuth ?? {}), [provider]: mode };
+  saveConfig({ ...config, providerAuth });
 }

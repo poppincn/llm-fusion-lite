@@ -21,12 +21,12 @@ for (const pkg of pkgs) {
 }
 
 const release = {
-  name: "@alexander-ollman/llm-fusion",
+  name: "@alexanderollman/llm-fusion",
   version: root.version ?? "0.1.0",
   description:
     "LLM Fusion — multi-model synthesis with adaptive, learned per-subject model strengths. CLI + OpenAI-compatible server + web UI + /fuse skill.",
   type: "module",
-  bin: { fuse: "dist/fuse.js", "fuse-run": "dist/fuse-run.js" },
+  bin: { fuse: "dist/fuse.js", "fuse-run": "dist/fuse-run.js", "fuse-mcp": "dist/mcp.js" },
   files: ["dist", "public", "skills", "README.md"],
   engines: { node: ">=22" },
   dependencies: Object.fromEntries(Object.entries(dependencies).sort()),

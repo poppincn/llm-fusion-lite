@@ -3,6 +3,7 @@ import type {
   ConfigModel,
   FusionConfig,
   ProviderName,
+  ReasoningEffort,
 } from "../types";
 import { getConfig, saveKey, updateConfig } from "../api";
 
@@ -11,6 +12,7 @@ interface Props {
 }
 
 const PROVIDERS: ProviderName[] = ["anthropic", "openai", "google"];
+const EFFORTS: ReasoningEffort[] = ["low", "medium", "high", "xhigh", "max"];
 
 interface ModelRow extends ConfigModel {
   autoPanel: boolean;
@@ -196,6 +198,7 @@ function ModelsSection({
         model: "",
         label: "",
         webSearch: false,
+        reasoningEffort: "high",
         autoPanel: false,
       },
     ]);
@@ -223,6 +226,7 @@ function ModelsSection({
         costPer1MIn: r.costPer1MIn,
         costPer1MOut: r.costPer1MOut,
         excludeFromAuto: r.excludeFromAuto,
+        reasoningEffort: r.reasoningEffort ?? "high",
       }));
       const autoPanel = rows
         .filter((r) => r.autoPanel)
@@ -261,6 +265,7 @@ function ModelsSection({
               <th>model</th>
               <th>label</th>
               <th>web</th>
+              <th>effort</th>
               <th className="num">$/1M in</th>
               <th className="num">$/1M out</th>
               <th>auto</th>
@@ -314,6 +319,23 @@ function ModelsSection({
                       update(i, { webSearch: e.target.checked })
                     }
                   />
+                </td>
+                <td>
+                  <select
+                    className="select-input"
+                    value={r.reasoningEffort ?? "high"}
+                    onChange={(e) =>
+                      update(i, {
+                        reasoningEffort: e.target.value as ReasoningEffort,
+                      })
+                    }
+                  >
+                    {EFFORTS.map((eff) => (
+                      <option key={eff} value={eff}>
+                        {eff}
+                      </option>
+                    ))}
+                  </select>
                 </td>
                 <td className="num">
                   <input

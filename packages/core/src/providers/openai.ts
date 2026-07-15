@@ -5,7 +5,9 @@ import type {
   CompletionResult,
   Provider,
 } from "../types.js";
-import { apiKeyFor } from "../config.js";
+import { apiKeyFor, authModeFor } from "../config.js";
+import { cliAvailable, cliComplete } from "./cli.js";
+import { sandboxComplete } from "./sandbox.js";
 
 export class OpenAIProvider implements Provider {
   name = "openai" as const;
@@ -13,7 +15,9 @@ export class OpenAIProvider implements Provider {
   private client: OpenAI | null = null;
 
   isConfigured(): boolean {
-    return !!apiKeyFor("openai");
+    return authModeFor(this.name) === "subscription"
+      ? cliAvailable(this.name)
+      : !!apiKeyFor(this.name);
   }
 
   private getClient(): OpenAI {
@@ -27,6 +31,12 @@ export class OpenAIProvider implements Provider {
     modelString: string,
     opts: CompletionOptions,
   ): Promise<CompletionResult> {
+    if (opts.agentic) {
+      return sandboxComplete(this.name, modelString, opts);
+    }
+    if (authModeFor(this.name) === "subscription") {
+      return cliComplete(this.name, modelString, opts);
+    }
     const start = Date.now();
     const system = opts.messages
       .filter((m) => m.role === "system")
@@ -40,6 +50,13 @@ export class OpenAIProvider implements Provider {
     const useTools = depth !== "light" && opts.webSearch !== false;
     const maxTokens = opts.maxTokens ?? (depth === "deep" ? 16000 : depth === "standard" ? 6000 : 2048);
 
+    // Reasoning effort → reasoning.effort, on gpt-5+ / o-series reasoning models
+    // only (non-reasoning models reject the field). OpenAI has no "xhigh"/"max",
+    // so clamp both to "high".
+    const isReasoningModel = /^(gpt-5|o\d)/i.test(modelString);
+    const rawEffort = opts.reasoningEffort ?? "high";
+    const oaEffort = rawEffort === "xhigh" || rawEffort === "max" ? "high" : rawEffort;
+
     try {
       // Responses API runs hosted tools (web search) in a server-side agentic loop.
       const stream = this.getClient().responses.stream(
@@ -49,6 +66,7 @@ export class OpenAIProvider implements Provider {
           input: input as unknown as string,
           max_output_tokens: maxTokens,
           ...(useTools ? { tools: [{ type: "web_search" }] } : {}),
+          ...(isReasoningModel ? { reasoning: { effort: oaEffort } } : {}),
         } as Parameters<OpenAI["responses"]["stream"]>[0],
         { signal: opts.signal },
       );

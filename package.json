@@ -20,7 +20,9 @@
     "dev:web": "npm run dev --workspace=@era-fusion/web",
     "fuse": "node packages/cli/dist/index.js",
     "pack:release": "bash scripts/build-package.sh",
-    "typecheck": "tsc -b"
+    "bench": "node scripts/bench/run.mjs",
+    "test": "npm run build:core && node --test \"packages/core/test/*.test.mjs\"",
+    "typecheck": "npm run build"
   },
   "devDependencies": {
     "tsup": "^8.3.0"

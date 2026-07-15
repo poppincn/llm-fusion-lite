@@ -150,6 +150,8 @@ export interface FuseRequest {
 
 export type ProviderName = "anthropic" | "openai" | "google";
 
+export type ReasoningEffort = "low" | "medium" | "high" | "xhigh" | "max";
+
 export interface ConfigModel {
   id: string;
   provider: string;
@@ -159,6 +161,7 @@ export interface ConfigModel {
   costPer1MIn?: number;
   costPer1MOut?: number;
   excludeFromAuto?: boolean;
+  reasoningEffort?: ReasoningEffort;
 }
 
 export interface FusionConfig {
@@ -194,6 +197,7 @@ export interface UsageTotals {
   inputTokens: number;
   outputTokens: number;
   costUsd: number;
+  estimated?: boolean;
 }
 
 export interface UsageByProvider {
@@ -202,6 +206,7 @@ export interface UsageByProvider {
   inputTokens: number;
   outputTokens: number;
   costUsd: number;
+  estimated?: boolean;
 }
 
 export interface UsageByModel {
@@ -211,6 +216,7 @@ export interface UsageByModel {
   inputTokens: number;
   outputTokens: number;
   costUsd: number;
+  estimated?: boolean;
 }
 
 export interface Usage {

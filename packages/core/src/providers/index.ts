@@ -2,11 +2,13 @@ import type { Provider, ProviderName } from "../types.js";
 import { AnthropicProvider } from "./anthropic.js";
 import { OpenAIProvider } from "./openai.js";
 import { GoogleProvider } from "./google.js";
+import { OpenAICompatibleProvider } from "./openai-compatible.js";
 
 const registry: Record<ProviderName, Provider> = {
   anthropic: new AnthropicProvider(),
   openai: new OpenAIProvider(),
   google: new GoogleProvider(),
+  "openai-compatible": new OpenAICompatibleProvider(),
 };
 
 export function getProvider(name: ProviderName): Provider {
@@ -20,4 +22,4 @@ export function configuredProviders(): ProviderName[] {
   );
 }
 
-export { AnthropicProvider, OpenAIProvider, GoogleProvider };
+export { AnthropicProvider, OpenAIProvider, GoogleProvider, OpenAICompatibleProvider };

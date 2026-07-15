@@ -69,6 +69,7 @@ CREATE TABLE IF NOT EXISTS usage (
   input_tokens INTEGER NOT NULL,
   output_tokens INTEGER NOT NULL,
   cost_usd REAL NOT NULL,
+  estimated INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_contrib_model_cat ON contributions(model_id, category);
@@ -84,6 +85,8 @@ export interface ProviderUsage {
   inputTokens: number;
   outputTokens: number;
   costUsd: number;
+  /** True if any of this provider's token counts are estimated (subscription). */
+  estimated: boolean;
 }
 
 export interface ModelUsage {
@@ -93,6 +96,7 @@ export interface ModelUsage {
   inputTokens: number;
   outputTokens: number;
   costUsd: number;
+  estimated: boolean;
 }
 
 export interface UsageTotals {
@@ -101,6 +105,8 @@ export interface UsageTotals {
   inputTokens: number;
   outputTokens: number;
   costUsd: number;
+  /** True if any usage in the total is estimated. */
+  estimated: boolean;
 }
 
 export interface UsageReport {
@@ -117,6 +123,12 @@ export class FusionStore {
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
     this.db = new SqliteDatabase(path);
     this.db.exec(SCHEMA);
+    // Migrate older DBs created before the `estimated` column existed.
+    try {
+      this.db.exec(`ALTER TABLE usage ADD COLUMN estimated INTEGER NOT NULL DEFAULT 0`);
+    } catch {
+      // column already exists
+    }
   }
 
   close(): void {
@@ -157,8 +169,8 @@ export class FusionStore {
     }
 
     const insertUsage = this.db.prepare(
-      `INSERT INTO usage (run_id, role, model_id, provider, input_tokens, output_tokens, cost_usd, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO usage (run_id, role, model_id, provider, input_tokens, output_tokens, cost_usd, estimated, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     );
     for (const u of result.usageBreakdown ?? []) {
       insertUsage.run(
@@ -169,6 +181,7 @@ export class FusionStore {
         Math.round(u.inputTokens) || 0,
         Math.round(u.outputTokens) || 0,
         u.costUsd || 0,
+        u.estimated ? 1 : 0,
         result.createdAt,
       );
     }
@@ -180,32 +193,35 @@ export class FusionStore {
       .prepare(
         `SELECT COUNT(DISTINCT run_id) AS runs, COUNT(*) AS calls,
                 COALESCE(SUM(input_tokens),0) AS inTok, COALESCE(SUM(output_tokens),0) AS outTok,
-                COALESCE(SUM(cost_usd),0) AS cost
+                COALESCE(SUM(cost_usd),0) AS cost, COALESCE(MAX(estimated),0) AS est
          FROM usage`,
       )
-      .get() as { runs: number; calls: number; inTok: number; outTok: number; cost: number };
+      .get() as { runs: number; calls: number; inTok: number; outTok: number; cost: number; est: number };
 
     const byProvider = (
       this.db
         .prepare(
           `SELECT provider, COUNT(*) AS calls, COALESCE(SUM(input_tokens),0) AS inTok,
-                  COALESCE(SUM(output_tokens),0) AS outTok, COALESCE(SUM(cost_usd),0) AS cost
+                  COALESCE(SUM(output_tokens),0) AS outTok, COALESCE(SUM(cost_usd),0) AS cost,
+                  COALESCE(MAX(estimated),0) AS est
            FROM usage GROUP BY provider ORDER BY cost DESC`,
         )
-        .all() as Array<{ provider: string; calls: number; inTok: number; outTok: number; cost: number }>
+        .all() as Array<{ provider: string; calls: number; inTok: number; outTok: number; cost: number; est: number }>
     ).map((r) => ({
       provider: r.provider,
       calls: r.calls,
       inputTokens: r.inTok,
       outputTokens: r.outTok,
       costUsd: r.cost,
+      estimated: r.est > 0,
     }));
 
     const byModel = (
       this.db
         .prepare(
           `SELECT model_id, provider, COUNT(*) AS calls, COALESCE(SUM(input_tokens),0) AS inTok,
-                  COALESCE(SUM(output_tokens),0) AS outTok, COALESCE(SUM(cost_usd),0) AS cost
+                  COALESCE(SUM(output_tokens),0) AS outTok, COALESCE(SUM(cost_usd),0) AS cost,
+                  COALESCE(MAX(estimated),0) AS est
            FROM usage GROUP BY model_id, provider ORDER BY cost DESC`,
         )
         .all() as Array<{
@@ -215,6 +231,7 @@ export class FusionStore {
         inTok: number;
         outTok: number;
         cost: number;
+        est: number;
       }>
     ).map((r) => ({
       modelId: r.model_id,
@@ -223,6 +240,7 @@ export class FusionStore {
       inputTokens: r.inTok,
       outputTokens: r.outTok,
       costUsd: r.cost,
+      estimated: r.est > 0,
     }));
 
     return {
@@ -232,6 +250,7 @@ export class FusionStore {
         inputTokens: totalsRow.inTok,
         outputTokens: totalsRow.outTok,
         costUsd: totalsRow.cost,
+        estimated: totalsRow.est > 0,
       },
       byProvider,
       byModel,
