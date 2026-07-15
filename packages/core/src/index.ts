@@ -20,6 +20,10 @@ export {
 export type { FusionConfig } from "./config.js";
 export { fuse, availableAutoPanel } from "./fusion.js";
 export type { FuseDeps } from "./fusion.js";
+export { preflightCredentials, formatMissingCredentials } from "./credentials.js";
+export type { CredentialStatus, PreflightResult } from "./credentials.js";
+export { cliAvailable, cliAuthProbe, cliLoginStatus, classifyCliError, resetAuthProbeCache } from "./providers/cli.js";
+export type { CliAuthResult } from "./providers/cli.js";
 export { FusionStore } from "./store.js";
 export type {
   ModelStrength,

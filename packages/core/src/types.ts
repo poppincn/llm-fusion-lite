@@ -112,6 +112,16 @@ export interface CompletionResult {
   latencyMs: number;
   /** Set when the call failed; text will be empty. */
   error?: string;
+  /**
+   * Coarse failure classification, set only when `error` is present.
+   *  - auth        : the provider/CLI is unauthenticated (missing key or login).
+   *  - timeout     : the call exceeded its time budget.
+   *  - unavailable : the provider/CLI/binary could not be reached at all.
+   *  - other       : any other runtime failure.
+   * `auth` failures are non-retryable and surface as a clear "skipped —
+   * unauthenticated" warning rather than a silent empty answer.
+   */
+  errorKind?: "auth" | "timeout" | "unavailable" | "other";
   /** Tools the agent invoked, when run in agentic mode (e.g. [{name:"Bash"}]). */
   toolCalls?: { name: string }[];
   /** Provider-reported real USD cost for this call, when available (e.g. agentic Claude). */
@@ -195,6 +205,16 @@ export interface FusionResult {
 
 /** Progress events emitted during a fusion run (for CLI/web streaming). */
 export type FusionEvent =
+  | {
+      /** Credential preflight verdict, emitted before any model call. */
+      type: "preflight";
+      /** Explicit panel (strict) vs adaptive (best-effort) selection. */
+      strict: boolean;
+      /** Model ids with usable credentials that the run will use. */
+      ready: string[];
+      /** Model ids skipped for missing/unauthenticated credentials, with reason. */
+      missing: { modelId: string; reason?: string }[];
+    }
   | { type: "category"; category: string }
   | { type: "depth"; depth: Depth; rationale: string }
   | {

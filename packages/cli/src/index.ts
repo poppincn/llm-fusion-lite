@@ -23,6 +23,8 @@ import {
   configuredProviders,
   getProvider,
   getModel,
+  cliAuthProbe,
+  cliLoginStatus,
   type FusionConfig,
   type ProviderName,
   type ProviderAuthMode,
@@ -88,6 +90,11 @@ program
         return;
       }
       switch (e.type) {
+        case "preflight":
+          for (const m of e.missing) {
+            log(chalk.yellow(`  ⚠ skipped ${m.modelId}${m.reason ? `: ${m.reason}` : " (no credentials)"}`));
+          }
+          break;
         case "category":
           log(chalk.dim(`category: ${e.category}`));
           break;
@@ -428,9 +435,21 @@ program
       if (mode === "subscription") {
         const present = onPath(cli.bin);
         const ver = present ? cliVersion(cli.bin) : null;
-        const detail = present
-          ? `${cli.bin}${ver ? ` v${ver}` : ""} present`
-          : `${cli.bin} not found — npm i -g ${cli.pkg}`;
+        let detail: string;
+        if (!present) {
+          detail = `${cli.bin} not found — npm i -g ${cli.pkg}`;
+        } else {
+          // cliLoginStatus is a cheap, non-model probe (codex only); null means
+          // "no reliable status command" — deep auth check happens under --probe.
+          const signedIn = cliLoginStatus(name);
+          const auth =
+            signedIn === true
+              ? chalk.green("signed in")
+              : signedIn === false
+                ? chalk.red(`NOT signed in — ${cli.loginHint}`)
+                : chalk.dim("auth unverified (use --probe)");
+          detail = `${cli.bin}${ver ? ` v${ver}` : ""} present · ${auth}`;
+        }
         log(`  ${opt(present)} ${label.padEnd(20)} ${chalk.dim("subscription")} — ${detail}`);
       } else {
         const keyed = !!apiKeyFor(name);
@@ -472,7 +491,14 @@ program
         const spec = getModel(config, id);
         if (!spec) continue;
         if (authModeFor(spec.provider, config) === "subscription") {
-          log(`  ${opt(true)} ${id.padEnd(20)} ${chalk.dim("subscription CLI — not probed")}`);
+          // Verify the CLI is actually authenticated (cheap status probe, or a
+          // minimal throwaway completion for CLIs without a status command).
+          const probe = await cliAuthProbe(spec.provider, spec.model);
+          if (probe.authenticated) {
+            log(`  ${ok(true)} ${id.padEnd(20)} ${chalk.dim(`authenticated${probe.reason ? ` (${probe.reason})` : ""}`)}`);
+          } else {
+            log(`  ${chalk.red("✗")} ${id.padEnd(20)} ${chalk.red(probe.reason ?? "unauthenticated")}`);
+          }
           continue;
         }
         try {

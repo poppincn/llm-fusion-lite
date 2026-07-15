@@ -138,8 +138,15 @@ adaptive store.
 ```
 
 …or just say *"run this through fusion."* The skill is **service-first with CLI fallback**:
-with provider keys it runs the full engine (and learns); without keys it orchestrates the
-`claude` / `codex` / `gemini` CLIs directly — so fusion works even before any keys are set.
+with provider keys it runs the full engine (and learns); without keys — or if the engine
+can't authenticate — it orchestrates the `claude` / `codex` / `gemini` CLIs directly, **in
+parallel**, so fusion works even before any keys are set.
+
+A **credential preflight** runs before any model call: fusion never dispatches to a provider
+without usable credentials. Uncredentialed or unauthenticated models are skipped up front
+with a clear reason (an explicit `--panel` is strict and stops if any selected model is
+missing credentials); a blank request is rejected without spending inference. Check what's
+ready with `fuse doctor` (add `--probe` to verify each CLI is actually logged in).
 
 ## Adaptive learning
 

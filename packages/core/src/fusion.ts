@@ -2,6 +2,7 @@
 import { randomUUID } from "node:crypto";
 import type { FusionConfig } from "./config.js";
 import { authModeFor, getModel, loadConfig, resolveTechniques } from "./config.js";
+import { formatMissingCredentials, preflightCredentials } from "./credentials.js";
 import { adjudicate } from "./adjudicate.js";
 import {
   parseConfidence,
@@ -78,6 +79,47 @@ export async function fuse(opts: FuseOptions, deps: FuseDeps = {}): Promise<Fusi
   const webSearch = opts.webSearch ?? config.webSearch;
 
   try {
+    // 0. Empty-prompt guard — never spend inference on a blank request. This is
+    // the deterministic gate that keeps the adjudicator/panel from running on
+    // whitespace and returning garbage or an opaque provider 4xx.
+    const promptText = messages.map((m) => m.content).join("").trim();
+    if (!promptText) {
+      throw new Error("Empty prompt: provide a non-empty question or task before running fusion.");
+    }
+
+    // 0b. Credential preflight — verify credentials BEFORE any model call
+    // (including the cheap adjudicator pre-pass). We never dispatch to a provider
+    // that has no API key or an unauthenticated CLI.
+    //
+    // Agentic runs execute inside the sandbox container using ITS credentials
+    // (passed at `sandbox/run.sh up`), not the host's API keys or CLI logins, so
+    // host-side preflight doesn't apply — fall back to registry eligibility there.
+    let readyIds: Set<string>;
+    if (opts.agentic) {
+      const eligible = availableAutoPanel(config);
+      if (eligible.length === 0) {
+        throw new Error("No models eligible for the agentic panel. Check the registry and that the sandbox is up.");
+      }
+      readyIds = new Set(eligible);
+    } else {
+      const preflight = await preflightCredentials(config, opts.panel, opts.signal);
+      emit({
+        type: "preflight",
+        strict: preflight.strict,
+        ready: preflight.ready.map((r) => r.modelId),
+        missing: preflight.missing.map((m) => ({ modelId: m.modelId, reason: m.reason })),
+      });
+      if (!preflight.ok) {
+        const detail = formatMissingCredentials(preflight.missing);
+        throw new Error(
+          preflight.strict
+            ? `Missing credentials for selected panel model(s):\n${detail}\n\nConfigure them, or drop them from --panel.`
+            : `No models have usable credentials. Configure at least one provider:\n${detail}\n\nRun \`fuse setup\` or \`fuse doctor\` for guidance.`,
+        );
+      }
+      readyIds = new Set(preflight.ready.map((r) => r.modelId));
+    }
+
     // 1. Adjudicate scope: subject + dynamic depth
     const adj = await adjudicate(messages, config, opts.signal);
     const category = opts.category ?? adj.subject;
@@ -86,21 +128,18 @@ export async function fuse(opts: FuseOptions, deps: FuseDeps = {}): Promise<Fusi
     emit({ type: "category", category });
     emit({ type: "depth", depth, rationale: adj.rationale });
 
-    // 2. Panel selection
-    const available = availableAutoPanel(config);
-    if (available.length === 0) {
-      throw new Error(
-        "No usable models. Set ANTHROPIC_API_KEY (and optionally OPENAI_API_KEY / GOOGLE_API_KEY).",
-      );
-    }
+    // 2. Panel selection — restricted to models that passed credential preflight.
     let panelIds: string[];
     if (opts.panel && opts.panel.length) {
-      panelIds = opts.panel.filter((id) => {
-        const spec = getModel(config, id);
-        return spec && getProvider(spec.provider).isConfigured();
-      });
-      if (!panelIds.length) panelIds = available.slice(0, opts.panelSize ?? config.panelSize);
+      // Explicit panel is strict: preflight already guaranteed every id is ready
+      // (or threw). Filter defensively so we never dispatch an uncredentialed one.
+      panelIds = opts.panel.filter((id) => readyIds.has(id));
+      if (!panelIds.length) {
+        throw new Error("Selected panel has no models with usable credentials.");
+      }
     } else {
+      // Adaptive: choose from the credentialed auto-panel subset only.
+      const available = [...readyIds];
       const size = Math.min(opts.panelSize ?? config.panelSize, available.length);
       panelIds = store
         ? store.selectPanel(available, category, size, config.explorationRate).map((p) => p.modelId)
@@ -114,6 +153,29 @@ export async function fuse(opts: FuseOptions, deps: FuseDeps = {}): Promise<Fusi
       type: "panel_selected",
       panel: panelSpecs.map((s) => ({ id: s.id, label: s.label })),
     });
+
+    // 2b. Resolve + credential-check the judge BEFORE dispatch, so synthesis
+    // never dies on an unauthenticated judge. If the configured judge lacks
+    // credentials, fall back to the first credentialed panelist.
+    let judge = resolveJudge(config, opts.judge);
+    if (!opts.agentic && !readyIds.has(judge.id)) {
+      const jp = await preflightCredentials(config, [judge.id], opts.signal);
+      if (!jp.ok) {
+        const fallback = panelSpecs[0];
+        if (!fallback) {
+          throw new Error(
+            `Judge "${judge.id}" lacks usable credentials and no credentialed panelist is available to substitute.`,
+          );
+        }
+        emit({
+          type: "preflight",
+          strict: true,
+          ready: [fallback.id],
+          missing: [{ modelId: judge.id, reason: `${jp.missing[0]?.reason ?? "no credentials"} — falling back to ${fallback.id} as judge` }],
+        });
+        judge = fallback;
+      }
+    }
 
     // 3. Dispatch panel in parallel (optionally asking for self-confidence).
     // In agentic mode, nudge panelists to actually USE their tools — models
@@ -161,8 +223,6 @@ export async function fuse(opts: FuseOptions, deps: FuseDeps = {}): Promise<Fusi
         return pr;
       }),
     );
-
-    const judge = resolveJudge(config, opts.judge);
 
     // 3b. Mixture-of-Agents refinement: panelists revise after seeing peers.
     for (let r = 0; r < tech.refineRounds; r++) {

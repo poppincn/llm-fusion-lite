@@ -75,6 +75,31 @@ export function estimateTokens(text: string): number {
   return Math.max(1, Math.ceil(text.length / 4));
 }
 
+/**
+ * Phrases a subscription CLI emits when it is unauthenticated. `execFile` folds
+ * the child's stderr into the Error message on a non-zero exit, so these match
+ * against that message. `gemini` also exits 41 specifically when no auth method
+ * is configured (observed) — treated as an auth failure regardless of message.
+ */
+const AUTH_ERROR_PATTERNS =
+  /\b(unauthenticated|not authenticated|not (?:signed|logged) ?in|please (?:sign|log) ?in|sign in|login required|auth(?:entication|orization) (?:required|failed|error)|no auth method|set an auth|missing (?:api ?key|credential)|invalid api ?key|expired (?:token|credential))\b/i;
+
+/**
+ * Classify a CLI subprocess failure into a coarse, actionable kind. `auth`
+ * failures are non-retryable (a retry can't fix a missing login) and are
+ * surfaced to the user as a clear "skipped — unauthenticated" warning.
+ */
+export function classifyCliError(
+  code: number | undefined,
+  message: string,
+): NonNullable<CompletionResult["errorKind"]> {
+  const m = message || "";
+  if (code === 41 || AUTH_ERROR_PATTERNS.test(m)) return "auth";
+  if (/\b(timed out|timeout|etimedout)\b/i.test(m)) return "timeout";
+  if (/\b(enoent|command not found|not found|no such file|spawn\b)\b/i.test(m)) return "unavailable";
+  return "other";
+}
+
 /** Hard cap on a single CLI subprocess (ms). */
 const CLI_TIMEOUT_MS = 180_000;
 
@@ -154,10 +179,96 @@ export async function cliComplete(
   opts: CompletionOptions,
 ): Promise<CompletionResult> {
   const res = await cliAttempt(provider, modelString, opts);
-  if (!res.error || opts.signal?.aborted || /abort/i.test(res.error)) return res;
+  // Don't retry: success, an abort, or an auth failure (a retry can't log you in).
+  if (!res.error || res.errorKind === "auth" || opts.signal?.aborted || /abort/i.test(res.error)) {
+    return res;
+  }
   await delay(750, opts.signal);
   if (opts.signal?.aborted) return res;
   return cliAttempt(provider, modelString, opts);
+}
+
+/**
+ * Cheap, non-model login-status check where a CLI provides one. Returns
+ * true/false when we can tell, or null when there's no reliable probe (the
+ * caller then falls back to a throwaway completion). `codex` has a stable
+ * `login status`; `claude` and `gemini` do not.
+ */
+export function cliLoginStatus(provider: ProviderName): boolean | null {
+  if (provider === "openai") {
+    try {
+      execFileSync("codex", ["login", "status"], { stdio: "ignore" });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  return null;
+}
+
+export interface CliAuthResult {
+  authenticated: boolean;
+  /** Human-readable detail / remediation when not authenticated (or inconclusive). */
+  reason?: string;
+}
+
+// Cache only POSITIVE results, keyed by binary: auth is stable within a run, and
+// not caching failures lets a user who logs in mid-session recover on the next run.
+const authOkCache = new Set<string>();
+
+/**
+ * Best-effort auth verification for a subscription CLI, run ONCE at preflight so
+ * the engine never dispatches a panelist to an unauthenticated CLI (the failure
+ * mode where an unauthenticated `gemini` exits 41 with no output mid-run).
+ * Prefers a cheap login-status probe; otherwise runs a minimal throwaway
+ * completion and inspects the error kind. Memoized per binary for the process.
+ */
+export async function cliAuthProbe(
+  provider: ProviderName,
+  modelString: string,
+  signal?: AbortSignal,
+): Promise<CliAuthResult> {
+  const spec = CLI_SPECS[provider];
+  if (!spec) return { authenticated: false, reason: `no subscription CLI for ${provider}` };
+  if (!cliAvailable(provider)) {
+    return { authenticated: false, reason: `${spec.bin} not found on PATH — install ${spec.pkg}` };
+  }
+  if (authOkCache.has(spec.bin)) return { authenticated: true };
+
+  const status = cliLoginStatus(provider);
+  if (status === true) {
+    authOkCache.add(spec.bin);
+    return { authenticated: true };
+  }
+  if (status === false) {
+    return { authenticated: false, reason: `${spec.bin} not signed in` };
+  }
+
+  // No status command (claude / gemini): a minimal throwaway completion is the
+  // honest "check before you run" — a couple seconds, unmetered on a subscription.
+  const res = await cliComplete(provider, modelString, {
+    messages: [{ role: "user", content: "ping" }],
+    maxTokens: 8,
+    depth: "light",
+    webSearch: false,
+    signal,
+  });
+  if (!res.error) {
+    authOkCache.add(spec.bin);
+    return { authenticated: true };
+  }
+  if (res.errorKind === "auth") {
+    return { authenticated: false, reason: `${spec.bin} unauthenticated — log in first` };
+  }
+  // A non-auth failure can't disprove auth — allow it through (the real call will
+  // surface the error), but pass the detail up so it can be logged.
+  authOkCache.add(spec.bin);
+  return { authenticated: true, reason: `auth probe inconclusive: ${res.error.slice(0, 80)}` };
+}
+
+/** Test/support hook: forget cached positive auth probes. */
+export function resetAuthProbeCache(): void {
+  authOkCache.clear();
 }
 
 /**
@@ -173,20 +284,24 @@ async function cliAttempt(
   const start = Date.now();
   const spec = CLI_SPECS[provider];
   if (!spec) {
-    return { text: "", model: modelString, provider, latencyMs: Date.now() - start, error: `no subscription CLI for provider ${provider}` };
+    return { text: "", model: modelString, provider, latencyMs: Date.now() - start, error: `no subscription CLI for provider ${provider}`, errorKind: "unavailable" };
   }
   const { bin } = spec;
   const prompt = foldPrompt(opts.messages);
   const inputTokensEst = estimateTokens(prompt);
   const outFile = spec.usesOutFile ? join(tmpdir(), `fuse-${bin}-${randomUUID()}.txt`) : undefined;
 
-  const fail = (message: string): CompletionResult => ({
+  const fail = (
+    message: string,
+    kind: NonNullable<CompletionResult["errorKind"]> = "other",
+  ): CompletionResult => ({
     text: "",
     model: modelString,
     provider,
     usage: undefined,
     latencyMs: Date.now() - start,
     error: message,
+    errorKind: kind,
   });
 
   // Subscription CLIs return the whole answer at once (no token stream). Emit it
@@ -238,13 +353,14 @@ async function cliAttempt(
           }
         }
         if (err) {
+          const code = (err as { code?: number }).code;
           // Treat any stdout we captured as salvageable only if non-empty and
           // the process still exited cleanly; otherwise surface the error.
-          if (text && (err as { code?: number }).code === 0) {
+          if (text && code === 0) {
             done(ok(text));
             return;
           }
-          done(fail(err.message));
+          done(fail(`${bin} exited ${code ?? "?"}: ${err.message}`, classifyCliError(code, err.message)));
           return;
         }
         if (!text) {

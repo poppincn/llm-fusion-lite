@@ -21,6 +21,7 @@
     "fuse": "node packages/cli/dist/index.js",
     "pack:release": "bash scripts/build-package.sh",
     "bench": "node scripts/bench/run.mjs",
+    "test": "npm run build:core && node --test \"packages/core/test/*.test.mjs\"",
     "typecheck": "npm run build"
   },
   "devDependencies": {
