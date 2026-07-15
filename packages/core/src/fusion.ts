@@ -210,6 +210,7 @@ export async function fuse(opts: FuseOptions, deps: FuseDeps = {}): Promise<Fusi
           webSearch: webSearch && (spec.webSearch ?? false),
           depth,
           agentic: opts.agentic,
+          reasoningEffort: spec.reasoningEffort,
           signal: opts.signal,
           onToken: (t) => emit({ type: "panel_token", modelId: spec.id, token: t }),
         });

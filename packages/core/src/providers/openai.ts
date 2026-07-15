@@ -50,6 +50,13 @@ export class OpenAIProvider implements Provider {
     const useTools = depth !== "light" && opts.webSearch !== false;
     const maxTokens = opts.maxTokens ?? (depth === "deep" ? 16000 : depth === "standard" ? 6000 : 2048);
 
+    // Reasoning effort → reasoning.effort, on gpt-5+ / o-series reasoning models
+    // only (non-reasoning models reject the field). OpenAI has no "xhigh"/"max",
+    // so clamp both to "high".
+    const isReasoningModel = /^(gpt-5|o\d)/i.test(modelString);
+    const rawEffort = opts.reasoningEffort ?? "high";
+    const oaEffort = rawEffort === "xhigh" || rawEffort === "max" ? "high" : rawEffort;
+
     try {
       // Responses API runs hosted tools (web search) in a server-side agentic loop.
       const stream = this.getClient().responses.stream(
@@ -59,6 +66,7 @@ export class OpenAIProvider implements Provider {
           input: input as unknown as string,
           max_output_tokens: maxTokens,
           ...(useTools ? { tools: [{ type: "web_search" }] } : {}),
+          ...(isReasoningModel ? { reasoning: { effort: oaEffort } } : {}),
         } as Parameters<OpenAI["responses"]["stream"]>[0],
         { signal: opts.signal },
       );

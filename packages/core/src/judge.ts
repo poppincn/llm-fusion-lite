@@ -181,6 +181,7 @@ export async function runJudgeAnalysis(
     webSearch: false,
     depth: "light",
     agentic: opts.agentic,
+    reasoningEffort: judge.reasoningEffort,
     signal: opts.signal,
     messages: [
       {
@@ -234,6 +235,7 @@ export async function runJudgeSynthesis(
     webSearch: false,
     depth: "light",
     agentic: opts.agentic,
+    reasoningEffort: judge.reasoningEffort,
     signal: opts.signal,
     onToken: opts.onToken,
     messages: [

@@ -83,6 +83,17 @@ export const DEFAULT_CATEGORIES = [
  */
 export const DEFAULT_MODELS: ModelSpec[] = [
   {
+    id: "claude-fable-5",
+    provider: "anthropic",
+    model: "claude-fable-5",
+    label: "Claude Fable 5",
+    webSearch: true,
+    costPer1MIn: 10,
+    costPer1MOut: 50,
+    // Anthropic's most capable model. Thinking is always on; depth is controlled
+    // via reasoningEffort (output_config.effort). Defaults to "high".
+  },
+  {
     id: "claude-opus-4-8",
     provider: "anthropic",
     model: "claude-opus-4-8",
@@ -109,6 +120,15 @@ export const DEFAULT_MODELS: ModelSpec[] = [
     costPer1MIn: 1,
     costPer1MOut: 5,
     // used as the classifier; usable as a panelist too
+  },
+  {
+    id: "gpt-5.6-sol",
+    provider: "openai",
+    model: "gpt-5.6-sol",
+    label: "GPT-5.6 (Sol)",
+    webSearch: true,
+    // OpenAI's GPT-5.6 "Sol" — frontier tier of the sol/terra/luna family.
+    // Reasoning effort → reasoning.effort.
   },
   {
     id: "gpt-5.5",
@@ -139,8 +159,10 @@ export const DEFAULT_MODELS: ModelSpec[] = [
 export const DEFAULT_CONFIG: FusionConfig = {
   models: DEFAULT_MODELS,
   autoPanel: [
+    "claude-fable-5",
     "claude-opus-4-8",
     "claude-sonnet-4-6",
+    "gpt-5.6-sol",
     "gpt-5.5",
     "gemini-2.5-pro",
     "gemini-3.5-flash",

@@ -1,0 +1,31 @@
+# Era Governance Configuration
+# Project governance rules (committed to repository)
+#
+# Override default deny rules by setting action to 'allow':
+#   rules:
+#     kubectl-apply:
+#       action: allow
+#       justification: "Development cluster only"
+#
+# Add custom rules:
+#   custom:
+#     - pattern: "npm run deploy:prod"
+#       action: deny
+#       reason: "Production deploys must go through CI/CD"
+#
+# See: https://era.anomaly.co/docs/governance
+
+settings:
+  require_permissions: true
+  environments:
+    staging:
+      gcp_project: era-core-staging
+      kube_context: ""
+    production:
+      gcp_project: era-core-prod
+      kube_context: ""
+    tools:
+      gcp_project: era-labs-tools
+      kube_context: ""
+  active_environment: staging
+  gcp_project: era-core-staging

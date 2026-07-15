@@ -92,6 +92,17 @@ the skill.
 > **$0/unmetered**. CLIs are also less reliable at strict JSON — keep the judge on an
 > api/Anthropic model when you can.
 
+### Models & reasoning effort
+
+The registry ships with **Claude Fable 5** (Anthropic's most capable) and **GPT-5.6
+(Sol)** alongside the Opus / Sonnet / GPT-5.5 / Gemini panelists. Each model has an
+editable **reasoning effort** (`low · medium · high · xhigh · max`, default `high`) in
+the dashboard's **Setup → Models** pane. Effort maps to each provider's native control —
+Anthropic `output_config.effort`, OpenAI `reasoning.effort` (`xhigh`/`max` clamp to
+`high`); providers without an effort knob ignore it. Newer default model ids
+(`claude-fable-5`, `gpt-5.6-sol`) may need a key with access — run `fuse doctor --probe`
+to confirm one answers before relying on it.
+
 ## Surfaces
 
 ### CLI

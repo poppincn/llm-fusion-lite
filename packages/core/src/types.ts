@@ -27,6 +27,14 @@ export type ProviderAuthMode = "api" | "subscription";
  */
 export type Depth = "light" | "standard" | "deep";
 
+/**
+ * Per-model reasoning effort. Maps to the provider's native control:
+ *  - Anthropic: `output_config.effort` (low/medium/high/xhigh/max; not on Haiku).
+ *  - OpenAI:    `reasoning.effort` (xhigh/max clamped to "high").
+ * Providers that have no effort knob (e.g. Google) ignore it. Default "high".
+ */
+export type ReasoningEffort = "low" | "medium" | "high" | "xhigh" | "max";
+
 /** A panelist/judge model the engine can call, as declared in config. */
 export interface ModelSpec {
   /** Stable id used everywhere (panel config, store keys). */
@@ -54,6 +62,11 @@ export interface ModelSpec {
    * (default "BASETEN_API_KEY"). Per-model so several endpoints can coexist.
    */
   apiKeyEnv?: string;
+  /**
+   * Reasoning effort for this model (default "high" when unset). Editable in the
+   * dashboard's Models pane; honored by providers that expose an effort knob.
+   */
+  reasoningEffort?: ReasoningEffort;
 }
 
 export interface Citation {
@@ -81,6 +94,11 @@ export interface CompletionOptions {
    * docs/AGENTIC_FUSION.md.
    */
   agentic?: boolean;
+  /**
+   * Reasoning effort for this call (default "high"). Threaded from the model's
+   * `ModelSpec.reasoningEffort`; providers map it to their native effort control.
+   */
+  reasoningEffort?: ReasoningEffort;
 }
 
 /**

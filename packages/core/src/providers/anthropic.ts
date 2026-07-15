@@ -76,6 +76,12 @@ export class AnthropicProvider implements Provider {
       if (system) params.system = system;
       if (tools.length) params.tools = tools;
       if (depth === "deep") params.thinking = { type: "adaptive" };
+      // Reasoning effort → output_config.effort (GA, no beta header). Effort is
+      // rejected on Haiku (and pre-4.6 Sonnet), so skip it there; every other
+      // registry model (Fable 5 / Opus 4.x / Sonnet 4.6) accepts low..max.
+      if (!/haiku/i.test(modelString)) {
+        params.output_config = { effort: opts.reasoningEffort ?? "high" };
+      }
 
       const stream = this.getClient().messages.stream(
         params as unknown as Parameters<Anthropic["messages"]["stream"]>[0],
