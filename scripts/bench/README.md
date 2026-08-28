@@ -1,6 +1,6 @@
-# Era Fusion benchmark harness
+# LLM Fusion Lite benchmark harness
 
-Put real numbers behind "fusion beats frontier": run a dataset through **era-fusion** and through each **single baseline model**, grade every answer, and print a scorecard (mean score, fusion-vs-best delta, latency, cost).
+Put real numbers behind "fusion beats frontier": run a dataset through **llm-fusion-lite** and through each **single baseline model**, grade every answer, and print a scorecard (mean score, fusion-vs-best delta, latency, cost).
 
 ## Run
 
@@ -17,18 +17,18 @@ Needs provider keys/subscriptions configured (`fuse doctor`). Cost: each item ru
 
 ## Technique ablation
 
-Each fusion technique can be run in isolation as its own system, so you can see which ones actually pay for their latency before fixing the `deep` preset. Every preset is a *full* `TechniqueConfig`, so it fully determines what runs regardless of the depth tier:
+Each fusion technique can be run in isolation as its own system, so you can see which ones actually pay for their latency before fixing the `deep` preset. Every preset is a _full_ `TechniqueConfig`, so it fully determines what runs regardless of the depth tier:
 
-| system | what runs |
-| --- | --- |
-| `fusion` | base pipeline (fan-out → synthesize) |
-| `fusion-refine` | + MoA refinement only |
-| `fusion-debate` | + MoA refinement with explicit disagreement resolution |
-| `fusion-pairwise` | + pairwise ranking → judge weights only |
-| `fusion-confidence` | + panelist self-confidence only |
-| `fusion-sc` | + self-consistency (2 synthesis samples) only |
-| `fusion-verify` | + post-synthesis verify/revise only |
-| `fusion-deep` | everything on |
+| system              | what runs                                              |
+| ------------------- | ------------------------------------------------------ |
+| `fusion`            | base pipeline (fan-out → synthesize)                   |
+| `fusion-refine`     | + MoA refinement only                                  |
+| `fusion-debate`     | + MoA refinement with explicit disagreement resolution |
+| `fusion-pairwise`   | + pairwise ranking → judge weights only                |
+| `fusion-confidence` | + panelist self-confidence only                        |
+| `fusion-sc`         | + self-consistency (2 synthesis samples) only          |
+| `fusion-verify`     | + post-synthesis verify/revise only                    |
+| `fusion-deep`       | everything on                                          |
 
 ```bash
 node scripts/bench/run.mjs data.jsonl --depth deep \
@@ -73,7 +73,7 @@ Output: per-judge accuracy with **bootstrap 95% CIs**, **paired diffs** vs the b
 
 - **GPQA-Diamond** (what Fugu reports, 95.5): convert each question to an objective MCQ row (`choices` + `answer` letter). 198 items → objective, deterministic grading.
 - **Humanity's Last Exam / open research (DRACO-style)**: use judged rows with a strong rubric per item; set `--judge` to your most capable model and exclude it from `--systems` to avoid self-grading bias.
-- **SWE-Bench Pro / LiveCodeBench**: these need an *execution* harness (apply patch, run tests) — out of scope for this grader; wire `run.mjs`'s grading step to a runner that executes and checks pass/fail.
+- **SWE-Bench Pro / LiveCodeBench**: these need an _execution_ harness (apply patch, run tests) — out of scope for this grader; wire `run.mjs`'s grading step to a runner that executes and checks pass/fail.
 
 ## Notes & caveats
 

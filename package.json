@@ -1,31 +1,33 @@
 {
-  "name": "era-fusion",
-  "version": "0.1.0",
-  "private": true,
-  "description": "Fusion-style multi-model synthesis with adaptive, learned model strengths. GUI + CLI + agentic skill.",
-  "type": "module",
-  "workspaces": [
-    "packages/core",
-    "packages/server",
-    "packages/cli",
-    "packages/web"
-  ],
-  "engines": {
-    "node": ">=22"
-  },
-  "scripts": {
-    "build": "npm run build --workspace=@era-fusion/core && npm run build --workspace=@era-fusion/server && npm run build --workspace=@era-fusion/cli && npm run build --workspace=@era-fusion/web",
-    "build:core": "npm run build --workspace=@era-fusion/core",
-    "dev:server": "npm run dev --workspace=@era-fusion/server",
-    "dev:web": "npm run dev --workspace=@era-fusion/web",
-    "fuse": "node packages/cli/dist/index.js",
-    "pack:release": "bash scripts/build-package.sh",
-    "bench": "node scripts/bench/run.mjs",
-    "test": "npm run build:core && node --test \"packages/core/test/*.test.mjs\"",
-    "typecheck": "npm run build"
-  },
-  "devDependencies": {
-    "tsup": "^8.3.0"
-  },
-  "license": "MIT"
+    "name": "llm-fusion-lite",
+    "version": "0.1.0",
+    "private": true,
+    "description": "LLM Fusion Lite — a lightweight multi-model fusion engine with adaptive, learned model strengths. GUI + CLI + agentic skill.",
+    "type": "module",
+    "workspaces": [
+        "packages/core",
+        "packages/server",
+        "packages/cli",
+        "packages/web"
+    ],
+    "engines": {
+        "node": ">=22"
+    },
+    "scripts": {
+        "build": "npm run build --workspace=@llm-fusion-lite/core && npm run build --workspace=@llm-fusion-lite/server && npm run build --workspace=@llm-fusion-lite/cli && npm run build --workspace=@llm-fusion-lite/web",
+        "build:core": "npm run build --workspace=@llm-fusion-lite/core",
+        "dev:server": "npm run dev --workspace=@llm-fusion-lite/server",
+        "dev:web": "npm run dev --workspace=@llm-fusion-lite/web",
+        "fusion-lite": "node packages/cli/dist/index.js",
+        "pack:release": "bash scripts/build-package.sh",
+        "bench": "node scripts/bench/run.mjs",
+        "test": "npm run build:core && node --test \"packages/core/test/*.test.mjs\"",
+        "format": "prettier --write .",
+        "typecheck": "npm run build"
+    },
+    "devDependencies": {
+        "prettier": "^3.9.6",
+        "tsup": "^8.3.0"
+    },
+    "license": "MIT"
 }

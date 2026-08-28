@@ -1,9 +1,6 @@
 {
-  "// note": "Shared MCP toolset mounted into the sandbox at /cfg/mcp.json. Start minimal; add custom servers/skills here and every panelist agent gets them. The CLIs also bring built-in bash/file/web tools.",
-  "mcpServers": {
-    "filesystem": {
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/work"]
+    "// note": "Shared MCP toolset mounted into the sandbox at /cfg/mcp.json. Start minimal; add custom servers/skills here and every panelist agent gets them. The CLIs also bring built-in bash/file/web tools.",
+    "mcpServers": {
+        "filesystem": { "command": "npx", "args": ["-y", "@modelcontextprotocol/server-filesystem", "/work"] }
     }
-  }
 }

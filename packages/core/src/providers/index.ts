@@ -5,21 +5,19 @@ import { GoogleProvider } from "./google.js";
 import { OpenAICompatibleProvider } from "./openai-compatible.js";
 
 const registry: Record<ProviderName, Provider> = {
-  anthropic: new AnthropicProvider(),
-  openai: new OpenAIProvider(),
-  google: new GoogleProvider(),
-  "openai-compatible": new OpenAICompatibleProvider(),
+    "anthropic": new AnthropicProvider(),
+    "openai": new OpenAIProvider(),
+    "google": new GoogleProvider(),
+    "openai-compatible": new OpenAICompatibleProvider()
 };
 
 export function getProvider(name: ProviderName): Provider {
-  return registry[name];
+    return registry[name];
 }
 
 /** Provider names that currently have an API key configured. */
 export function configuredProviders(): ProviderName[] {
-  return (Object.keys(registry) as ProviderName[]).filter((n) =>
-    registry[n].isConfigured(),
-  );
+    return (Object.keys(registry) as ProviderName[]).filter(n => registry[n].isConfigured());
 }
 
 export { AnthropicProvider, OpenAIProvider, GoogleProvider, OpenAICompatibleProvider };

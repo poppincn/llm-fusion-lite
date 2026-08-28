@@ -1,0 +1,12 @@
+node_modules/
+dist/
+release/
+*.tsbuildinfo
+package-lock.json
+scripts/bench/data/
+.git/
+.era/
+.claude/
+.opencode/
+.github/skills/
+sandbox/tools/

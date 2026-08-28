@@ -1,25 +1,25 @@
 #!/usr/bin/env bash
-# Era Fusion agentic sandbox — build / start / smoke-test the disposable container
-# in which panelists run as full tool-using agents. See docs/AGENTIC_FUSION.md.
+# LLM Fusion Lite agentic sandbox — build / start / smoke-test the disposable
+# container in which panelists run as full tool-using agents. See docs/AGENTIC_FUSION.md.
 #
 #   sandbox/run.sh build           # build the image (CLIs + runtimes + MCP)
-#   sandbox/run.sh up              # start the long-lived sandbox (keys from ~/.era-fusion/.env)
+#   sandbox/run.sh up              # start the long-lived sandbox (keys from ~/.llm-fusion-lite/.env)
 #   sandbox/run.sh login           # one-time interactive OAuth for subscription CLIs (claude/codex)
 #   sandbox/run.sh smoke [gemini|claude|codex]  # agent that MUST use a tool (proves execution)
 #   sandbox/run.sh exec <cmd...>   # run an arbitrary command in the sandbox
 #   sandbox/run.sh down            # stop + remove the sandbox
 #
-# Auth: API-mode models read keys from ~/.era-fusion/.env (passed via --env-file).
+# Auth: API-mode models read keys from ~/.llm-fusion-lite/.env (passed via --env-file).
 # Subscription CLIs (claude/codex) store an OAuth token in the host Keychain on
 # macOS, which can't be mounted into Linux — so log in once *inside* the container
 # (`login`); it persists for the container's lifetime (use a named volume to keep
 # it across `down` — see docs/AGENTIC_FUSION.md).
 set -euo pipefail
 
-IMAGE="era-fusion-sandbox"
-NAME="era-fusion-sandbox"
+IMAGE="llm-fusion-lite-sandbox"
+NAME="llm-fusion-lite-sandbox"
 HERE="$(cd "$(dirname "$0")" && pwd)"
-ENV_FILE="$HOME/.era-fusion/.env"
+ENV_FILE="$HOME/.llm-fusion-lite/.env"
 
 need_docker() {
   docker info >/dev/null 2>&1 || { echo "Docker daemon is not running. Start Docker Desktop (or 'colima start')." >&2; exit 1; }

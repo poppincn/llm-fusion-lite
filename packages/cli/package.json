@@ -1,31 +1,31 @@
 {
-  "name": "@era-fusion/cli",
-  "version": "0.1.0",
-  "description": "fuse — CLI for Era Fusion. Run multi-model synthesis from the terminal or pipe it into agentic workflows.",
-  "type": "module",
-  "bin": {
-    "fuse": "./dist/index.js",
-    "fuse-run": "./dist/fuse-run.js",
-    "fuse-mcp": "./dist/mcp.js"
-  },
-  "files": [
-    "dist"
-  ],
-  "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "clean": "rm -rf dist"
-  },
-  "dependencies": {
-    "@clack/prompts": "^1.5.1",
-    "@era-fusion/core": "*",
-    "@era-fusion/server": "*",
-    "@modelcontextprotocol/sdk": "^1.29.0",
-    "chalk": "^5.3.0",
-    "commander": "^12.1.0",
-    "zod": "^4.4.3"
-  },
-  "devDependencies": {
-    "@types/node": "^22.10.0",
-    "typescript": "^5.7.0"
-  }
+    "name": "@llm-fusion-lite/cli",
+    "version": "0.1.0",
+    "description": "fusion-lite — CLI for LLM Fusion Lite. Run multi-model synthesis from the terminal or pipe it into agentic workflows.",
+    "type": "module",
+    "bin": {
+        "fusion-lite": "./dist/index.js",
+        "fusion-lite-run": "./dist/fuse-run.js",
+        "fusion-lite-mcp": "./dist/mcp.js"
+    },
+    "files": [
+        "dist"
+    ],
+    "scripts": {
+        "build": "tsc -p tsconfig.json",
+        "clean": "rm -rf dist"
+    },
+    "dependencies": {
+        "@clack/prompts": "^1.5.1",
+        "@llm-fusion-lite/core": "*",
+        "@llm-fusion-lite/server": "*",
+        "@modelcontextprotocol/sdk": "^1.29.0",
+        "chalk": "^5.3.0",
+        "commander": "^12.1.0",
+        "zod": "^4.4.3"
+    },
+    "devDependencies": {
+        "@types/node": "^22.10.0",
+        "typescript": "^5.7.0"
+    }
 }

@@ -1,15 +1,18 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
+import { LanguageProvider } from "./i18n";
 import "./styles.css";
 
 const container = document.getElementById("root");
 if (!container) {
-  throw new Error('Root element "#root" not found');
+    throw new Error('Root element "#root" not found');
 }
 
 createRoot(container).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
+    <StrictMode>
+        <LanguageProvider>
+            <App />
+        </LanguageProvider>
+    </StrictMode>
 );

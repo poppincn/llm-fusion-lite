@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# Era Fusion setup: install deps, build, put `fuse`/`fuse-run` on PATH, and
-# install the /fuse skill into Claude Code and OpenCode. Idempotent.
+# LLM Fusion Lite setup: install deps, build, put `fusion-lite`/`fusion-lite-run`
+# on PATH, and install the /fuse skill into Claude Code and OpenCode. Idempotent.
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-BIN_DIR="${ERA_FUSION_BIN:-$HOME/.local/bin}"
+BIN_DIR="${LLM_FUSION_LITE_BIN:-$HOME/.local/bin}"
 cd "$REPO"
 
-echo "==> Era Fusion setup ($REPO)"
+echo "==> LLM Fusion Lite setup ($REPO)"
 
 # 1. Dependencies + build
 if [ ! -d node_modules ]; then
@@ -23,19 +23,19 @@ rm -rf packages/server/public
 
 # 3. Launchers on PATH
 mkdir -p "$BIN_DIR"
-cat > "$BIN_DIR/fuse" <<EOF
+cat > "$BIN_DIR/fusion-lite" <<EOF
 #!/usr/bin/env bash
 exec node "$REPO/packages/cli/dist/index.js" "\$@"
 EOF
-chmod +x "$BIN_DIR/fuse"
+chmod +x "$BIN_DIR/fusion-lite"
 
-cat > "$BIN_DIR/fuse-run" <<EOF
+cat > "$BIN_DIR/fusion-lite-run" <<EOF
 #!/usr/bin/env bash
 exec bash "$REPO/skills/fuse/scripts/fuse-run.sh" "\$@"
 EOF
-chmod +x "$BIN_DIR/fuse-run"
+chmod +x "$BIN_DIR/fusion-lite-run"
 chmod +x "$REPO/skills/fuse/scripts/fuse-run.sh"
-echo "==> Installed launchers to $BIN_DIR (fuse, fuse-run)"
+echo "==> Installed launchers to $BIN_DIR (fusion-lite, fusion-lite-run)"
 
 # 4. Install the /fuse skill into harnesses
 install_skill() {
@@ -70,6 +70,6 @@ node "$REPO/packages/cli/dist/index.js" doctor || true
 echo
 echo "Next:"
 echo "  • Set provider keys: export ANTHROPIC_API_KEY=…  (optionally OPENAI_API_KEY, GOOGLE_API_KEY)"
-echo "  • CLI:    fuse \"your question\""
-echo "  • Server+UI: fuse serve   →  http://localhost:8787"
+echo "  • CLI:    fusion-lite \"your question\""
+echo "  • Server+UI: fusion-lite serve   →  http://localhost:8787"
 echo "  • Agent:  /fuse <request>   (Claude Code / OpenCode)"

@@ -7,7 +7,7 @@ dist/
 *.log
 .DS_Store
 # local fusion data (sqlite store, config)
-.era-fusion/
+.llm-fusion-lite/
 packages/web/dist/
 packages/server/public/
 # publishable bundle output

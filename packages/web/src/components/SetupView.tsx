@@ -1,711 +1,776 @@
 import { useCallback, useEffect, useState } from "react";
-import type {
-  ConfigModel,
-  FusionConfig,
-  ProviderName,
-  ReasoningEffort,
-} from "../types";
+import type { ConfigModel, FusionConfig, ProviderDef, ProviderName, ReasoningEffort } from "../types";
 import { getConfig, saveKey, updateConfig } from "../api";
+import { useT } from "../i18n";
 
 interface Props {
-  onConfigChange?: (config: FusionConfig) => void;
+    onConfigChange?: (config: FusionConfig) => void;
 }
 
-const KEY_PROVIDERS: ProviderName[] = ["anthropic", "openai", "google"];
-const MODEL_PROVIDERS: ProviderName[] = ["anthropic", "openai", "google", "openai-compatible"];
+const ADAPTERS: Array<{ value: ProviderName; labelKey: string }> = [
+    { value: "anthropic", labelKey: "setup.adapterAnthropic" },
+    { value: "openai", labelKey: "setup.adapterOpenai" },
+    { value: "google", labelKey: "setup.adapterGoogle" },
+    { value: "openai-compatible", labelKey: "setup.adapterCustom" }
+];
 const EFFORTS: ReasoningEffort[] = ["low", "medium", "high", "xhigh", "max"];
 
-interface ModelRow extends ConfigModel {
-  autoPanel: boolean;
-  headersText: string;
-  extraParamsText: string;
+const DEFAULT_KEY_ENV: Record<ProviderName, string> = {
+    "anthropic": "ANTHROPIC_API_KEY",
+    "openai": "OPENAI_API_KEY",
+    "google": "GOOGLE_API_KEY",
+    "openai-compatible": "BASETEN_API_KEY"
+};
+
+interface ModelRow {
+    id: string;
+    providerId: string;
+    model: string;
+    label: string;
+    webSearch: boolean;
+    reasoningEffort: ReasoningEffort;
+    costPer1MIn?: number;
+    costPer1MOut?: number;
+    excludeFromAuto?: boolean;
+    autoPanel: boolean;
 }
 
 export function SetupView({ onConfigChange }: Props) {
-  const [config, setConfig] = useState<FusionConfig | null>(null);
-  const [error, setError] = useState<string | null>(null);
+    const { t } = useT();
+    const [config, setConfig] = useState<FusionConfig | null>(null);
+    const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    setError(null);
-    try {
-      const c = await getConfig();
-      setConfig(c);
-      onConfigChange?.(c);
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : String(err));
-    }
-  }, [onConfigChange]);
+    const load = useCallback(async () => {
+        setError(null);
+        try {
+            const c = await getConfig();
+            setConfig(c);
+            onConfigChange?.(c);
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : String(err));
+        }
+    }, [onConfigChange]);
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+    useEffect(() => {
+        void load();
+    }, [load]);
 
-  return (
-    <div className="strengths">
-      <div className="strengths-bar">
-        <h2>Setup</h2>
-        <div className="strengths-controls">
-          <button
-            type="button"
-            className="btn-ghost"
-            onClick={() => void load()}
-          >
-            Refresh
-          </button>
-        </div>
-      </div>
-
-      {error && <div className="banner banner-error inline-error">{error}</div>}
-
-      {!config ? (
-        <p className="muted">Loading…</p>
-      ) : (
-        <div className="setup-sections">
-          <KeysSection config={config} onSaved={() => void load()} />
-          <ModelsSection config={config} onSaved={() => void load()} />
-          <SettingsSection config={config} onSaved={() => void load()} />
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* ---------- Provider keys ---------- */
-
-function KeysSection({
-  config,
-  onSaved,
-}: {
-  config: FusionConfig;
-  onSaved: () => void;
-}) {
-  const [keys, setKeys] = useState<Record<ProviderName, string>>({
-    anthropic: "",
-    openai: "",
-    google: "",
-  });
-  const [busy, setBusy] = useState<ProviderName | null>(null);
-  const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(
-    null,
-  );
-
-  const save = async (provider: ProviderName) => {
-    const key = keys[provider].trim();
-    if (key.length === 0) {
-      setMsg({ kind: "err", text: "Enter a key before saving." });
-      return;
-    }
-    setBusy(provider);
-    setMsg(null);
-    try {
-      await saveKey(provider, key);
-      setKeys((k) => ({ ...k, [provider]: "" }));
-      setMsg({ kind: "ok", text: `${provider} key saved.` });
-      onSaved();
-    } catch (err: unknown) {
-      setMsg({
-        kind: "err",
-        text: err instanceof Error ? err.message : String(err),
-      });
-    } finally {
-      setBusy(null);
-    }
-  };
-
-  return (
-    <section className="card">
-      <h3 className="card-title">Provider keys</h3>
-      {msg && (
-        <div
-          className={`banner inline-error ${
-            msg.kind === "ok" ? "banner-ok" : "banner-error"
-          }`}
-        >
-          {msg.text}
-        </div>
-      )}
-      <div className="setup-keys">
-        {KEY_PROVIDERS.map((p) => {
-          const set = config.providers.includes(p);
-          return (
-            <div key={p} className="setup-key-row">
-              <span className="setup-key-name">{p}</span>
-              <span
-                className={set ? "setup-status-ok" : "setup-status-off"}
-              >
-                {set ? "✓ configured" : "not set"}
-              </span>
-              <input
-                type="password"
-                className="text-input setup-key-input"
-                placeholder={`${p} API key`}
-                value={keys[p]}
-                onChange={(e) =>
-                  setKeys((k) => ({ ...k, [p]: e.target.value }))
-                }
-              />
-              <button
-                type="button"
-                className="btn-ghost"
-                onClick={() => void save(p)}
-                disabled={busy === p}
-              >
-                {busy === p ? "Saving…" : "Save"}
-              </button>
+    return (
+        <div className="strengths">
+            <div className="strengths-bar">
+                <h2>{t("nav.setup")}</h2>
+                <div className="strengths-controls">
+                    <button type="button" className="btn-ghost" onClick={() => void load()}>
+                        {t("strengths.refresh")}
+                    </button>
+                </div>
             </div>
-          );
-        })}
-        <CustomKeyRow />
-      </div>
-      <p className="muted setup-note">
-        Keys are stored locally in <code>~/.era-fusion/.env</code> on the
-        server.
-      </p>
-    </section>
-  );
+
+            {error && <div className="banner banner-error inline-error">{error}</div>}
+
+            {!config ?
+                <p className="muted">{t("setup.loading")}</p>
+            :   <div className="setup-sections">
+                    <ProvidersSection config={config} onSaved={() => void load()} />
+                    <ModelsSection config={config} onSaved={() => void load()} />
+                    <SettingsSection config={config} onSaved={() => void load()} />
+                </div>
+            }
+        </div>
+    );
 }
 
-function CustomKeyRow() {
-  const [env, setEnv] = useState("");
-  const [key, setKey] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<string | null>(null);
+/* ---------- Providers ---------- */
 
-  const save = async () => {
-    const name = env.trim();
-    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) {
-      setMsg("env var name must look like MY_LLM_API_KEY");
-      return;
-    }
-    if (!key.trim()) {
-      setMsg("enter a key value (any non-empty value works for keyless local endpoints)");
-      return;
-    }
-    setBusy(true);
-    setMsg(null);
-    try {
-      await saveKey("custom", key.trim(), name);
-      setKey("");
-      setMsg(`wrote ${name} to ~/.era-fusion/.env (live)`);
-    } catch (err) {
-      setMsg(err instanceof Error ? err.message : String(err));
-    } finally {
-      setBusy(false);
-    }
-  };
+interface ProviderDraft {
+    id: string;
+    name: string;
+    adapter: ProviderName;
+    apiKeyEnv: string;
+    keyText: string;
+    baseURL: string;
+    apiKeyHeader: string;
+    headersText: string;
+    extraParamsText: string;
+}
 
-  return (
-    <>
-      <div className="setup-key-row">
-        <span className="setup-key-name">custom (any env var)</span>
-        <input
-          className="text-input setup-key-input"
-          placeholder="env var name, e.g. MY_LLM_API_KEY"
-          value={env}
-          onChange={(e) => setEnv(e.target.value)}
-        />
-        <input
-          type="password"
-          className="text-input setup-key-input"
-          placeholder="key value"
-          value={key}
-          onChange={(e) => setKey(e.target.value)}
-        />
-        <button
-          type="button"
-          className="btn-ghost"
-          disabled={busy}
-          onClick={() => void save()}
-        >
-          {busy ? "Saving…" : "Save"}
-        </button>
-      </div>
-      {msg && <p className="muted setup-note">{msg}</p>}
-    </>
-  );
+function blankProvider(): ProviderDraft {
+    return {
+        id: "",
+        name: "",
+        adapter: "openai",
+        apiKeyEnv: "",
+        keyText: "",
+        baseURL: "",
+        apiKeyHeader: "",
+        headersText: "",
+        extraParamsText: ""
+    };
+}
+
+function draftFrom(def: ProviderDef): ProviderDraft {
+    return {
+        id: def.id,
+        name: def.name,
+        adapter: def.adapter,
+        apiKeyEnv: def.apiKeyEnv ?? "",
+        keyText: "",
+        baseURL: def.baseURL ?? "",
+        apiKeyHeader: def.apiKeyHeader ?? "",
+        headersText: def.headers ? JSON.stringify(def.headers) : "",
+        extraParamsText: def.extraParams ? JSON.stringify(def.extraParams) : ""
+    };
+}
+
+function ProvidersSection({ config, onSaved }: { config: FusionConfig; onSaved: () => void }) {
+    const { t } = useT();
+    const providers = config.providers ?? [];
+    const [draft, setDraft] = useState<ProviderDraft | null>(null);
+    const [isNew, setIsNew] = useState(false);
+    const [busy, setBusy] = useState(false);
+    const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+
+    const openAdd = () => {
+        setIsNew(true);
+        setDraft(blankProvider());
+    };
+    const openEdit = (p: ProviderDef) => {
+        setIsNew(false);
+        setDraft(draftFrom(p));
+    };
+    const close = () => {
+        if (busy) return;
+        setDraft(null);
+    };
+
+    const save = async () => {
+        if (!draft) return;
+        setMsg(null);
+        const name = draft.name.trim();
+        if (!name) {
+            setMsg({ kind: "err", text: t("setup.providerNameRequired") });
+            return;
+        }
+        const id = draft.id.trim();
+        if (!id) {
+            setMsg({ kind: "err", text: t("setup.providerIdRequired") });
+            return;
+        }
+        const others = providers.filter(p => p.id !== draft.id);
+        if (!isNew && providers.every(p => p.id !== draft.id) && others.some(p => p.id === id)) {
+            setMsg({ kind: "err", text: t("setup.providerIdUnique") });
+            return;
+        }
+        if (isNew && others.some(p => p.id === id)) {
+            setMsg({ kind: "err", text: t("setup.providerIdUnique") });
+            return;
+        }
+        if (draft.adapter === "openai-compatible" && !draft.baseURL.trim()) {
+            setMsg({ kind: "err", text: t("setup.baseURLRequired") });
+            return;
+        }
+        let headers: Record<string, string> | undefined;
+        try {
+            headers = parseJsonObject(draft.headersText) as Record<string, string> | undefined;
+        } catch {
+            setMsg({ kind: "err", text: t("setup.headersInvalid", { id }) });
+            return;
+        }
+        let extraParams: Record<string, unknown> | undefined;
+        try {
+            extraParams = parseJsonObject(draft.extraParamsText);
+        } catch {
+            setMsg({ kind: "err", text: t("setup.paramsInvalid", { id }) });
+            return;
+        }
+        setBusy(true);
+        try {
+            const def: ProviderDef = {
+                id,
+                name,
+                adapter: draft.adapter,
+                apiKeyEnv: draft.apiKeyEnv.trim() || undefined,
+                baseURL: draft.baseURL.trim() || undefined,
+                apiKeyHeader: draft.apiKeyHeader.trim() || undefined,
+                headers,
+                extraParams
+            };
+            const next = isNew ? [...providers, def] : providers.map(p => (p.id === def.id ? def : p));
+            await updateConfig({ providers: next });
+            const keyText = draft.keyText.trim();
+            if (keyText) {
+                if (def.adapter === "openai-compatible") {
+                    await saveKey("custom", keyText, def.apiKeyEnv ?? DEFAULT_KEY_ENV["openai-compatible"]);
+                } else if (def.apiKeyEnv) {
+                    await saveKey("custom", keyText, def.apiKeyEnv);
+                } else {
+                    await saveKey(def.adapter, keyText);
+                }
+            }
+            setDraft(null);
+            onSaved();
+        } catch (err: unknown) {
+            setMsg({ kind: "err", text: err instanceof Error ? err.message : String(err) });
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    const remove = async () => {
+        if (!draft) return;
+        setMsg(null);
+        if (config.models.some(m => m.providerId === draft.id)) {
+            setMsg({ kind: "err", text: t("setup.providerInUse") });
+            return;
+        }
+        setBusy(true);
+        try {
+            await updateConfig({ providers: providers.filter(p => p.id !== draft.id) });
+            setDraft(null);
+            onSaved();
+        } catch (err: unknown) {
+            setMsg({ kind: "err", text: err instanceof Error ? err.message : String(err) });
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    const modelsFor = (id: string) => config.models.filter(m => m.providerId === id).length;
+
+    return (
+        <section className="card">
+            <h3 className="card-title">{t("setup.providers")}</h3>
+            {msg && (
+                <div className={`banner inline-error ${msg.kind === "ok" ? "banner-ok" : "banner-error"}`}>
+                    {msg.text}
+                </div>
+            )}
+            {providers.length === 0 ?
+                <p className="muted">{t("setup.noProviders")}</p>
+            :   <div className="provider-grid">
+                    {providers.map(p => (
+                        <div key={p.id} className="provider-card">
+                            <div className="provider-card-head">
+                                <span className="provider-name">{p.name}</span>
+                                <span className="badge">
+                                    {p.adapter === "openai-compatible" ?
+                                        t("setup.adapterCustomShort")
+                                    :   t(ADAPTERS.find(a => a.value === p.adapter)?.labelKey ?? "setup.adapterCustom")}
+                                </span>
+                            </div>
+                            <div className="provider-card-detail muted">
+                                {p.adapter === "openai-compatible" ?
+                                    p.baseURL || t("setup.baseURLRequired")
+                                :   `${t("setup.keyEnv")}: ${p.apiKeyEnv ?? DEFAULT_KEY_ENV[p.adapter]}`}{" "}
+                                <span className={p.keySet ? "setup-status-ok" : "setup-status-off"}>
+                                    {p.keySet ? t("setup.keySet") : t("setup.keyMissing")}
+                                </span>
+                            </div>
+                            <div className="provider-card-foot">
+                                <span className="muted">{t("setup.modelsCount", { n: modelsFor(p.id) })}</span>
+                                <button type="button" className="btn-ghost btn-small" onClick={() => openEdit(p)}>
+                                    {t("setup.edit")}
+                                </button>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            }
+            <div className="setup-actions">
+                <button type="button" className="btn-ghost" onClick={openAdd}>
+                    {t("setup.addProvider")}
+                </button>
+            </div>
+
+            {draft && (
+                <div className="modal-backdrop" onClick={close}>
+                    <div
+                        className="modal"
+                        role="dialog"
+                        aria-modal="true"
+                        aria-label={t(isNew ? "setup.newProvider" : "setup.editProvider")}
+                        onClick={e => e.stopPropagation()}
+                    >
+                        <div className="modal-head">
+                            <h4>{t(isNew ? "setup.newProvider" : "setup.editProvider")}</h4>
+                            <button type="button" className="modal-close" aria-label={t("setup.close")} onClick={close}>
+                                ✕
+                            </button>
+                        </div>
+                        <div className="modal-body">
+                            <label className="field">
+                                <span className="field-label">{t("setup.providerName")}</span>
+                                <input
+                                    className="text-input"
+                                    value={draft.name}
+                                    autoFocus
+                                    onChange={e => setDraft({ ...draft, name: e.target.value })}
+                                />
+                            </label>
+                            <label className="field">
+                                <span className="field-label">
+                                    {t("setup.providerId")} <span className="muted">({t("setup.providerIdHint")})</span>
+                                </span>
+                                <input
+                                    className="text-input"
+                                    value={draft.id}
+                                    disabled={!isNew}
+                                    placeholder="openai-pro"
+                                    onChange={e => setDraft({ ...draft, id: e.target.value })}
+                                />
+                            </label>
+                            <label className="field">
+                                <span className="field-label">{t("setup.adapter")}</span>
+                                <select
+                                    className="select-input"
+                                    value={draft.adapter}
+                                    onChange={e => setDraft({ ...draft, adapter: e.target.value as ProviderName })}
+                                >
+                                    {ADAPTERS.map(a => (
+                                        <option key={a.value} value={a.value}>
+                                            {t(a.labelKey)}
+                                        </option>
+                                    ))}
+                                </select>
+                            </label>
+                            <label className="field">
+                                <span className="field-label">{t("setup.keyEnv")}</span>
+                                <input
+                                    className="text-input"
+                                    value={draft.apiKeyEnv}
+                                    placeholder={DEFAULT_KEY_ENV[draft.adapter]}
+                                    onChange={e => setDraft({ ...draft, apiKeyEnv: e.target.value })}
+                                />
+                            </label>
+                            <label className="field">
+                                <span className="field-label">{t("setup.key")}</span>
+                                <input
+                                    type="password"
+                                    className="text-input"
+                                    value={draft.keyText}
+                                    placeholder={t("setup.keyHint")}
+                                    onChange={e => setDraft({ ...draft, keyText: e.target.value })}
+                                />
+                            </label>
+                            {draft.adapter === "openai-compatible" && (
+                                <>
+                                    <p className="muted setup-note">{t("setup.customOnlyHint")}</p>
+                                    <label className="field">
+                                        <span className="field-label">{t("setup.baseURL")}</span>
+                                        <input
+                                            className="text-input"
+                                            value={draft.baseURL}
+                                            placeholder="http://localhost:11434/v1"
+                                            onChange={e => setDraft({ ...draft, baseURL: e.target.value })}
+                                        />
+                                    </label>
+                                    <label className="field">
+                                        <span className="field-label">{t("setup.authHeader")}</span>
+                                        <input
+                                            className="text-input"
+                                            value={draft.apiKeyHeader}
+                                            placeholder="Authorization"
+                                            onChange={e => setDraft({ ...draft, apiKeyHeader: e.target.value })}
+                                        />
+                                    </label>
+                                    <label className="field">
+                                        <span className="field-label">{t("setup.headers")}</span>
+                                        <input
+                                            className="text-input"
+                                            value={draft.headersText}
+                                            placeholder='{ "X-Title": "app" }'
+                                            onChange={e => setDraft({ ...draft, headersText: e.target.value })}
+                                        />
+                                    </label>
+                                    <label className="field">
+                                        <span className="field-label">{t("setup.params")}</span>
+                                        <input
+                                            className="text-input"
+                                            value={draft.extraParamsText}
+                                            placeholder='{ "temperature": 0.2 }'
+                                            onChange={e => setDraft({ ...draft, extraParamsText: e.target.value })}
+                                        />
+                                    </label>
+                                </>
+                            )}
+                        </div>
+                        <div className="modal-actions">
+                            {!isNew && (
+                                <button
+                                    type="button"
+                                    className="btn-ghost modal-danger"
+                                    disabled={busy}
+                                    onClick={() => void remove()}
+                                >
+                                    {t("setup.delete")}
+                                </button>
+                            )}
+                            <span className="modal-spacer" />
+                            <button type="button" className="btn-ghost" disabled={busy} onClick={close}>
+                                {t("setup.cancel")}
+                            </button>
+                            <button type="button" className="composer-send" disabled={busy} onClick={() => void save()}>
+                                {busy ? t("setup.saving") : t("setup.save")}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </section>
+    );
 }
 
 /* ---------- Models ---------- */
 
-function ModelsSection({
-  config,
-  onSaved,
-}: {
-  config: FusionConfig;
-  onSaved: () => void;
-}) {
-  const [rows, setRows] = useState<ModelRow[]>(() => toRows(config));
-  const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(
-    null,
-  );
+function ModelsSection({ config, onSaved }: { config: FusionConfig; onSaved: () => void }) {
+    const { t } = useT();
+    const providers = config.providers ?? [];
+    const [rows, setRows] = useState<ModelRow[]>(() => toRows(config));
+    const [busy, setBusy] = useState(false);
+    const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
 
-  // Reset local rows whenever the upstream config changes.
-  useEffect(() => {
-    setRows(toRows(config));
-  }, [config]);
+    // Reset local rows whenever the upstream config changes.
+    useEffect(() => {
+        setRows(toRows(config));
+    }, [config]);
 
-  const update = (idx: number, patch: Partial<ModelRow>) => {
-    setRows((rs) => rs.map((r, i) => (i === idx ? { ...r, ...patch } : r)));
-  };
+    const update = (idx: number, patch: Partial<ModelRow>) => {
+        setRows(rs => rs.map((r, i) => (i === idx ? { ...r, ...patch } : r)));
+    };
 
-  const remove = (idx: number) => {
-    setRows((rs) => rs.filter((_, i) => i !== idx));
-  };
+    const remove = (idx: number) => {
+        setRows(rs => rs.filter((_, i) => i !== idx));
+    };
 
-  const add = () => {
-    setRows((rs) => [
-      ...rs,
-      {
-        id: "",
-        provider: "anthropic",
-        model: "",
-        label: "",
-        webSearch: false,
-        reasoningEffort: "high",
-        autoPanel: false,
-        baseURL: "",
-        apiKeyEnv: "",
-        apiKeyHeader: "",
-        headersText: "",
-        extraParamsText: "",
-      },
-    ]);
-  };
+    const add = () => {
+        setRows(rs => [
+            ...rs,
+            {
+                id: "",
+                providerId: providers[0]?.id ?? "",
+                model: "",
+                label: "",
+                webSearch: false,
+                reasoningEffort: "high",
+                autoPanel: false
+            }
+        ]);
+    };
 
-  const save = async () => {
-    const ids = rows.map((r) => r.id.trim());
-    if (ids.some((id) => id.length === 0)) {
-      setMsg({ kind: "err", text: "Every model needs a non-empty id." });
-      return;
-    }
-    if (new Set(ids).size !== ids.length) {
-      setMsg({ kind: "err", text: "Model ids must be unique." });
-      return;
-    }
-    setBusy(true);
-    setMsg(null);
-    try {
-      const models: ConfigModel[] = rows.map((r) => {
-        let headers: Record<string, string> | undefined;
-        try {
-          headers = parseJsonObject(r.headersText) as Record<string, string> | undefined;
-        } catch {
-          throw new Error(`headers for "${r.id}" is not a JSON object`);
+    const save = async () => {
+        const ids = rows.map(r => r.id.trim());
+        if (ids.some(id => id.length === 0)) {
+            setMsg({ kind: "err", text: t("setup.modelIdRequired") });
+            return;
         }
-        let extraParams: Record<string, unknown> | undefined;
-        try {
-          extraParams = parseJsonObject(r.extraParamsText);
-        } catch {
-          throw new Error(`params for "${r.id}" is not a JSON object`);
+        if (new Set(ids).size !== ids.length) {
+            setMsg({ kind: "err", text: t("setup.modelIdsUnique") });
+            return;
         }
-        return {
-          id: r.id.trim(),
-          provider: r.provider,
-          model: r.model?.trim() ? r.model.trim() : undefined,
-          label: r.label,
-          webSearch: r.webSearch,
-          costPer1MIn: r.costPer1MIn,
-          costPer1MOut: r.costPer1MOut,
-          excludeFromAuto: r.excludeFromAuto,
-          reasoningEffort: r.reasoningEffort ?? "high",
-          baseURL: r.baseURL?.trim() ? r.baseURL.trim() : undefined,
-          apiKeyEnv: r.apiKeyEnv?.trim() ? r.apiKeyEnv.trim() : undefined,
-          apiKeyHeader: r.apiKeyHeader?.trim() ? r.apiKeyHeader.trim() : undefined,
-          headers,
-          extraParams,
-        };
-      });
-      const autoPanel = rows
-        .filter((r) => r.autoPanel)
-        .map((r) => r.id.trim());
-      await updateConfig({ models, autoPanel });
-      setMsg({ kind: "ok", text: "Models saved." });
-      onSaved();
-    } catch (err: unknown) {
-      setMsg({
-        kind: "err",
-        text: err instanceof Error ? err.message : String(err),
-      });
-    } finally {
-      setBusy(false);
-    }
-  };
+        setBusy(true);
+        setMsg(null);
+        try {
+            if (rows.some(r => !r.providerId)) {
+                throw new Error(t("setup.modelProviderRequired"));
+            }
+            const byId = new Map(providers.map(p => [p.id, p]));
+            const models: ConfigModel[] = rows.map(r => ({
+                id: r.id.trim(),
+                providerId: r.providerId,
+                provider: byId.get(r.providerId)?.adapter ?? "openai-compatible",
+                model: r.model?.trim() ? r.model.trim() : undefined,
+                label: r.label,
+                webSearch: r.webSearch,
+                costPer1MIn: r.costPer1MIn,
+                costPer1MOut: r.costPer1MOut,
+                excludeFromAuto: r.excludeFromAuto,
+                reasoningEffort: r.reasoningEffort ?? "high"
+            }));
+            const autoPanel = rows.filter(r => r.autoPanel).map(r => r.id.trim());
+            await updateConfig({ models, autoPanel });
+            setMsg({ kind: "ok", text: t("setup.modelsSaved") });
+            onSaved();
+        } catch (err: unknown) {
+            setMsg({ kind: "err", text: err instanceof Error ? err.message : String(err) });
+        } finally {
+            setBusy(false);
+        }
+    };
 
-  return (
-    <section className="card">
-      <h3 className="card-title">Models</h3>
-      {msg && (
-        <div
-          className={`banner inline-error ${
-            msg.kind === "ok" ? "banner-ok" : "banner-error"
-          }`}
-        >
-          {msg.text}
-        </div>
-      )}
-      <div className="setup-table-scroll">
-        <table className="strengths-table setup-models-table">
-          <thead>
-            <tr>
-              <th>id</th>
-              <th>provider</th>
-              <th>model</th>
-              <th>baseURL</th>
-              <th>key env</th>
-              <th>auth hdr</th>
-              <th>label</th>
-              <th>web</th>
-              <th>effort</th>
-              <th className="num">$/1M in</th>
-              <th className="num">$/1M out</th>
-              <th>auto</th>
-              <th>headers (JSON)</th>
-              <th>params (JSON)</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r, i) => (
-              <tr key={i}>
-                <td>
-                  <input
-                    className="text-input cell-input"
-                    value={r.id}
-                    onChange={(e) => update(i, { id: e.target.value })}
-                  />
-                </td>
-                <td>
-                  <select
-                    className="select-input"
-                    value={r.provider}
-                    onChange={(e) =>
-                      update(i, { provider: e.target.value })
-                    }
-                  >
-                    {MODEL_PROVIDERS.map((p) => (
-                      <option key={p} value={p}>
-                        {p}
-                      </option>
-                    ))}
-                  </select>
-                </td>
-                <td>
-                  <input
-                    className="text-input cell-input"
-                    value={r.model ?? ""}
-                    onChange={(e) => update(i, { model: e.target.value })}
-                  />
-                </td>
-                <td>
-                  <input
-                    className="text-input cell-input"
-                    placeholder="http://localhost:11434/v1"
-                    value={r.baseURL ?? ""}
-                    onChange={(e) => update(i, { baseURL: e.target.value })}
-                  />
-                </td>
-                <td>
-                  <input
-                    className="text-input cell-input"
-                    placeholder="BASETEN_API_KEY"
-                    value={r.apiKeyEnv ?? ""}
-                    onChange={(e) => update(i, { apiKeyEnv: e.target.value })}
-                  />
-                </td>
-                <td>
-                  <input
-                    className="text-input cell-input"
-                    placeholder="Authorization"
-                    value={r.apiKeyHeader ?? ""}
-                    onChange={(e) => update(i, { apiKeyHeader: e.target.value })}
-                  />
-                </td>
-                <td>
-                  <input
-                    className="text-input cell-input"
-                    value={r.label}
-                    onChange={(e) => update(i, { label: e.target.value })}
-                  />
-                </td>
-                <td>
-                  <input
-                    type="checkbox"
-                    checked={r.webSearch ?? false}
-                    onChange={(e) =>
-                      update(i, { webSearch: e.target.checked })
-                    }
-                  />
-                </td>
-                <td>
-                  <select
-                    className="select-input"
-                    value={r.reasoningEffort ?? "high"}
-                    onChange={(e) =>
-                      update(i, {
-                        reasoningEffort: e.target.value as ReasoningEffort,
-                      })
-                    }
-                  >
-                    {EFFORTS.map((eff) => (
-                      <option key={eff} value={eff}>
-                        {eff}
-                      </option>
-                    ))}
-                  </select>
-                </td>
-                <td className="num">
-                  <input
-                    type="number"
-                    className="num-input"
-                    value={r.costPer1MIn ?? ""}
-                    onChange={(e) =>
-                      update(i, { costPer1MIn: parseNum(e.target.value) })
-                    }
-                  />
-                </td>
-                <td className="num">
-                  <input
-                    type="number"
-                    className="num-input"
-                    value={r.costPer1MOut ?? ""}
-                    onChange={(e) =>
-                      update(i, { costPer1MOut: parseNum(e.target.value) })
-                    }
-                  />
-                </td>
-                <td>
-                  <input
-                    type="checkbox"
-                    checked={r.autoPanel}
-                    onChange={(e) =>
-                      update(i, { autoPanel: e.target.checked })
-                    }
-                  />
-                </td>
-                <td>
-                  <input
-                    className="text-input cell-input"
-                    placeholder='{ "X-Title": "app" }'
-                    value={r.headersText}
-                    onChange={(e) => update(i, { headersText: e.target.value })}
-                  />
-                </td>
-                <td>
-                  <input
-                    className="text-input cell-input"
-                    placeholder='{ "temperature": 0.2 }'
-                    value={r.extraParamsText}
-                    onChange={(e) => update(i, { extraParamsText: e.target.value })}
-                  />
-                </td>
-                <td>
-                  <button
-                    type="button"
-                    className="btn-ghost btn-small"
-                    onClick={() => remove(i)}
-                  >
-                    ✕
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <div className="setup-actions">
-        <button type="button" className="btn-ghost" onClick={add}>
-          Add model
-        </button>
-        <button
-          type="button"
-          className="composer-send"
-          onClick={() => void save()}
-          disabled={busy}
-        >
-          {busy ? "Saving…" : "Save models"}
-        </button>
-      </div>
-    </section>
-  );
+    return (
+        <section className="card">
+            <h3 className="card-title">{t("setup.models")}</h3>
+            {msg && (
+                <div className={`banner inline-error ${msg.kind === "ok" ? "banner-ok" : "banner-error"}`}>
+                    {msg.text}
+                </div>
+            )}
+            <div className="setup-table-scroll">
+                <table className="strengths-table setup-models-table">
+                    <thead>
+                        <tr>
+                            <th>{t("setup.colId")}</th>
+                            <th>{t("setup.providers")}</th>
+                            <th>{t("setup.colModel")}</th>
+                            <th>{t("setup.colLabel")}</th>
+                            <th>{t("setup.colWeb")}</th>
+                            <th>{t("setup.colEffort")}</th>
+                            <th className="num">{t("setup.colCostIn")}</th>
+                            <th className="num">{t("setup.colCostOut")}</th>
+                            <th>{t("setup.colAuto")}</th>
+                            <th />
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {rows.map((r, i) => (
+                            <tr key={i}>
+                                <td>
+                                    <input
+                                        className="text-input cell-input"
+                                        value={r.id}
+                                        onChange={e => update(i, { id: e.target.value })}
+                                    />
+                                </td>
+                                <td>
+                                    <select
+                                        className="select-input"
+                                        value={r.providerId}
+                                        onChange={e => update(i, { providerId: e.target.value })}
+                                    >
+                                        {providers.map(p => (
+                                            <option key={p.id} value={p.id}>
+                                                {p.name}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </td>
+                                <td>
+                                    <input
+                                        className="text-input cell-input"
+                                        value={r.model ?? ""}
+                                        onChange={e => update(i, { model: e.target.value })}
+                                    />
+                                </td>
+                                <td>
+                                    <input
+                                        className="text-input cell-input"
+                                        value={r.label}
+                                        onChange={e => update(i, { label: e.target.value })}
+                                    />
+                                </td>
+                                <td>
+                                    <input
+                                        type="checkbox"
+                                        checked={r.webSearch ?? false}
+                                        onChange={e => update(i, { webSearch: e.target.checked })}
+                                    />
+                                </td>
+                                <td>
+                                    <select
+                                        className="select-input"
+                                        value={r.reasoningEffort ?? "high"}
+                                        onChange={e =>
+                                            update(i, { reasoningEffort: e.target.value as ReasoningEffort })
+                                        }
+                                    >
+                                        {EFFORTS.map(eff => (
+                                            <option key={eff} value={eff}>
+                                                {eff}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </td>
+                                <td className="num">
+                                    <input
+                                        type="number"
+                                        className="num-input"
+                                        value={r.costPer1MIn ?? ""}
+                                        onChange={e => update(i, { costPer1MIn: parseNum(e.target.value) })}
+                                    />
+                                </td>
+                                <td className="num">
+                                    <input
+                                        type="number"
+                                        className="num-input"
+                                        value={r.costPer1MOut ?? ""}
+                                        onChange={e => update(i, { costPer1MOut: parseNum(e.target.value) })}
+                                    />
+                                </td>
+                                <td>
+                                    <input
+                                        type="checkbox"
+                                        checked={r.autoPanel}
+                                        onChange={e => update(i, { autoPanel: e.target.checked })}
+                                    />
+                                </td>
+                                <td>
+                                    <button type="button" className="btn-ghost btn-small" onClick={() => remove(i)}>
+                                        ✕
+                                    </button>
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+            <div className="setup-actions">
+                <button type="button" className="btn-ghost" onClick={add}>
+                    {t("setup.addModel")}
+                </button>
+                <button type="button" className="composer-send" onClick={() => void save()} disabled={busy}>
+                    {busy ? t("setup.saving") : t("setup.saveModels")}
+                </button>
+            </div>
+        </section>
+    );
 }
 
 /* ---------- Settings ---------- */
 
-function SettingsSection({
-  config,
-  onSaved,
-}: {
-  config: FusionConfig;
-  onSaved: () => void;
-}) {
-  const [defaultJudge, setDefaultJudge] = useState(config.defaultJudge);
-  const [classifierModel, setClassifierModel] = useState(
-    config.classifierModel,
-  );
-  const [panelSize, setPanelSize] = useState(config.panelSize);
-  const [webSearch, setWebSearch] = useState(config.webSearch);
-  const [explorationRate, setExplorationRate] = useState(
-    config.explorationRate,
-  );
-  const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(
-    null,
-  );
+function SettingsSection({ config, onSaved }: { config: FusionConfig; onSaved: () => void }) {
+    const { t } = useT();
+    const [defaultJudge, setDefaultJudge] = useState(config.defaultJudge);
+    const [classifierModel, setClassifierModel] = useState(config.classifierModel);
+    const [panelSize, setPanelSize] = useState(config.panelSize);
+    const [webSearch, setWebSearch] = useState(config.webSearch);
+    const [explorationRate, setExplorationRate] = useState(config.explorationRate);
+    const [busy, setBusy] = useState(false);
+    const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
 
-  useEffect(() => {
-    setDefaultJudge(config.defaultJudge);
-    setClassifierModel(config.classifierModel);
-    setPanelSize(config.panelSize);
-    setWebSearch(config.webSearch);
-    setExplorationRate(config.explorationRate);
-  }, [config]);
+    useEffect(() => {
+        setDefaultJudge(config.defaultJudge);
+        setClassifierModel(config.classifierModel);
+        setPanelSize(config.panelSize);
+        setWebSearch(config.webSearch);
+        setExplorationRate(config.explorationRate);
+    }, [config]);
 
-  const save = async () => {
-    setBusy(true);
-    setMsg(null);
-    try {
-      await updateConfig({
-        defaultJudge,
-        classifierModel,
-        panelSize,
-        webSearch,
-        explorationRate,
-      });
-      setMsg({ kind: "ok", text: "Settings saved." });
-      onSaved();
-    } catch (err: unknown) {
-      setMsg({
-        kind: "err",
-        text: err instanceof Error ? err.message : String(err),
-      });
-    } finally {
-      setBusy(false);
-    }
-  };
+    const save = async () => {
+        setBusy(true);
+        setMsg(null);
+        try {
+            await updateConfig({ defaultJudge, classifierModel, panelSize, webSearch, explorationRate });
+            setMsg({ kind: "ok", text: t("setup.settingsSaved") });
+            onSaved();
+        } catch (err: unknown) {
+            setMsg({ kind: "err", text: err instanceof Error ? err.message : String(err) });
+        } finally {
+            setBusy(false);
+        }
+    };
 
-  const modelIds = config.models.map((m) => m.id);
+    const modelIds = config.models.map(m => m.id);
 
-  return (
-    <section className="card">
-      <h3 className="card-title">Settings</h3>
-      {msg && (
-        <div
-          className={`banner inline-error ${
-            msg.kind === "ok" ? "banner-ok" : "banner-error"
-          }`}
-        >
-          {msg.text}
-        </div>
-      )}
-      <div className="setup-settings">
-        <label className="settings-inline">
-          Default judge
-          <select
-            className="select-input"
-            value={defaultJudge}
-            onChange={(e) => setDefaultJudge(e.target.value)}
-          >
-            {modelIds.map((id) => (
-              <option key={id} value={id}>
-                {id}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="settings-inline">
-          Classifier model
-          <select
-            className="select-input"
-            value={classifierModel}
-            onChange={(e) => setClassifierModel(e.target.value)}
-          >
-            {modelIds.map((id) => (
-              <option key={id} value={id}>
-                {id}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="settings-inline">
-          Panel size
-          <input
-            type="number"
-            min={1}
-            className="num-input"
-            value={panelSize}
-            onChange={(e) =>
-              setPanelSize(Math.max(1, Math.floor(Number(e.target.value) || 1)))
-            }
-          />
-        </label>
-        <label className="settings-inline">
-          <input
-            type="checkbox"
-            checked={webSearch}
-            onChange={(e) => setWebSearch(e.target.checked)}
-          />
-          Web search
-        </label>
-        <label className="settings-inline">
-          Exploration rate
-          <input
-            type="number"
-            min={0}
-            max={1}
-            step={0.05}
-            className="num-input"
-            value={explorationRate}
-            onChange={(e) =>
-              setExplorationRate(
-                clampRate(Number(e.target.value)),
-              )
-            }
-          />
-        </label>
-      </div>
-      <div className="setup-actions">
-        <button
-          type="button"
-          className="composer-send"
-          onClick={() => void save()}
-          disabled={busy}
-        >
-          {busy ? "Saving…" : "Save settings"}
-        </button>
-      </div>
-    </section>
-  );
+    return (
+        <section className="card">
+            <h3 className="card-title">{t("setup.settings")}</h3>
+            {msg && (
+                <div className={`banner inline-error ${msg.kind === "ok" ? "banner-ok" : "banner-error"}`}>
+                    {msg.text}
+                </div>
+            )}
+            <div className="setup-settings">
+                <label className="settings-inline">
+                    {t("setup.defaultJudge")}
+                    <select
+                        className="select-input"
+                        value={defaultJudge}
+                        onChange={e => setDefaultJudge(e.target.value)}
+                    >
+                        {modelIds.map(id => (
+                            <option key={id} value={id}>
+                                {id}
+                            </option>
+                        ))}
+                    </select>
+                </label>
+                <label className="settings-inline">
+                    {t("setup.classifier")}
+                    <select
+                        className="select-input"
+                        value={classifierModel}
+                        onChange={e => setClassifierModel(e.target.value)}
+                    >
+                        {modelIds.map(id => (
+                            <option key={id} value={id}>
+                                {id}
+                            </option>
+                        ))}
+                    </select>
+                </label>
+                <label className="settings-inline">
+                    {t("setup.panelSize")}
+                    <input
+                        type="number"
+                        min={1}
+                        className="num-input"
+                        value={panelSize}
+                        onChange={e => setPanelSize(Math.max(1, Math.floor(Number(e.target.value) || 1)))}
+                    />
+                </label>
+                <label className="settings-inline">
+                    <input type="checkbox" checked={webSearch} onChange={e => setWebSearch(e.target.checked)} />
+                    {t("setup.webSearch")}
+                </label>
+                <label className="settings-inline">
+                    {t("setup.explorationRate")}
+                    <input
+                        type="number"
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        className="num-input"
+                        value={explorationRate}
+                        onChange={e => setExplorationRate(clampRate(Number(e.target.value)))}
+                    />
+                </label>
+            </div>
+            <div className="setup-actions">
+                <button type="button" className="composer-send" onClick={() => void save()} disabled={busy}>
+                    {busy ? t("setup.saving") : t("setup.saveSettings")}
+                </button>
+            </div>
+        </section>
+    );
 }
 
 /* ---------- helpers ---------- */
 
 function toRows(config: FusionConfig): ModelRow[] {
-  const auto = new Set(config.autoPanel);
-  return config.models.map((m) => ({
-    ...m,
-    autoPanel: auto.has(m.id),
-    headersText: m.headers ? JSON.stringify(m.headers) : "",
-    extraParamsText: m.extraParams ? JSON.stringify(m.extraParams) : "",
-  }));
+    const auto = new Set(config.autoPanel);
+    const providers = config.providers ?? [];
+    const providerIdOf = (m: ConfigModel): string =>
+        m.providerId ?? providers.find(p => p.adapter === m.provider)?.id ?? providers[0]?.id ?? "";
+    return config.models.map(m => ({
+        id: m.id,
+        providerId: providerIdOf(m),
+        model: m.model ?? "",
+        label: m.label,
+        webSearch: m.webSearch ?? false,
+        reasoningEffort: m.reasoningEffort ?? "high",
+        costPer1MIn: m.costPer1MIn,
+        costPer1MOut: m.costPer1MOut,
+        excludeFromAuto: m.excludeFromAuto,
+        autoPanel: auto.has(m.id)
+    }));
 }
 
 function parseJsonObject(text: string): Record<string, unknown> | undefined {
-  if (!text.trim()) return undefined;
-  const parsed: unknown = JSON.parse(text);
-  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-    throw new Error("not a JSON object");
-  }
-  return parsed as Record<string, unknown>;
+    if (!text.trim()) return undefined;
+    const parsed: unknown = JSON.parse(text);
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+        throw new Error("not a JSON object");
+    }
+    return parsed as Record<string, unknown>;
 }
 
 function parseNum(v: string): number | undefined {
-  if (v.trim() === "") return undefined;
-  const n = Number(v);
-  return Number.isFinite(n) ? n : undefined;
+    if (v.trim() === "") return undefined;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : undefined;
 }
 
 function clampRate(n: number): number {
-  if (!Number.isFinite(n)) return 0;
-  return Math.min(1, Math.max(0, n));
+    if (!Number.isFinite(n)) return 0;
+    return Math.min(1, Math.max(0, n));
 }

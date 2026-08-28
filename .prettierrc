@@ -1,0 +1,10 @@
+{
+    "experimentalOperatorPosition": "start",
+    "experimentalTernaries": true,
+    "objectWrap": "collapse",
+    "printWidth": 120,
+    "quoteProps": "consistent",
+    "tabWidth": 4,
+    "trailingComma": "none",
+    "arrowParens": "avoid"
+}
