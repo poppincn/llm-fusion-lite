@@ -16,3 +16,17 @@ Keep the /docs folder and the README.md up to date as the code changes.
 @.claude/era-shared/planning-artifacts.md
 @.claude/era-shared/reviewer-discipline.md
 <!-- ERA:MANAGED:END -->
+
+## Agent skills
+
+### Issue tracker
+
+Issues live in GitHub Issues for `jamcaaxian/llm-fusion`, operated via the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five canonical triage roles map 1:1 to label strings of the same name. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: `CONTEXT.md` at the repo root plus `docs/adr/`. See `docs/agents/domain.md`.
