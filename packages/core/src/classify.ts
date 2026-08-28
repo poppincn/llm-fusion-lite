@@ -1,6 +1,6 @@
 /** Cheap prompt categorization to drive per-category adaptive panel selection. */
 import type { FusionConfig } from "./config.js";
-import { apiKeyFor, getModel } from "./config.js";
+import { apiKeyForModel, getModel } from "./config.js";
 import { getProvider } from "./providers/index.js";
 import type { ChatMessage } from "./types.js";
 
@@ -35,7 +35,7 @@ export async function classifyPrompt(
 ): Promise<string> {
   const text = lastUserText(messages);
   const spec = getModel(config, config.classifierModel);
-  if (!spec || !apiKeyFor(spec.provider)) {
+  if (!spec || !apiKeyForModel(spec)) {
     return heuristic(text, config.categories);
   }
 

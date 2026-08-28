@@ -11,11 +11,14 @@ interface Props {
   onConfigChange?: (config: FusionConfig) => void;
 }
 
-const PROVIDERS: ProviderName[] = ["anthropic", "openai", "google"];
+const KEY_PROVIDERS: ProviderName[] = ["anthropic", "openai", "google"];
+const MODEL_PROVIDERS: ProviderName[] = ["anthropic", "openai", "google", "openai-compatible"];
 const EFFORTS: ReasoningEffort[] = ["low", "medium", "high", "xhigh", "max"];
 
 interface ModelRow extends ConfigModel {
   autoPanel: boolean;
+  headersText: string;
+  extraParamsText: string;
 }
 
 export function SetupView({ onConfigChange }: Props) {
@@ -122,7 +125,7 @@ function KeysSection({
         </div>
       )}
       <div className="setup-keys">
-        {PROVIDERS.map((p) => {
+        {KEY_PROVIDERS.map((p) => {
           const set = config.providers.includes(p);
           return (
             <div key={p} className="setup-key-row">
@@ -152,12 +155,73 @@ function KeysSection({
             </div>
           );
         })}
+        <CustomKeyRow />
       </div>
       <p className="muted setup-note">
         Keys are stored locally in <code>~/.era-fusion/.env</code> on the
         server.
       </p>
     </section>
+  );
+}
+
+function CustomKeyRow() {
+  const [env, setEnv] = useState("");
+  const [key, setKey] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  const save = async () => {
+    const name = env.trim();
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) {
+      setMsg("env var name must look like MY_LLM_API_KEY");
+      return;
+    }
+    if (!key.trim()) {
+      setMsg("enter a key value (any non-empty value works for keyless local endpoints)");
+      return;
+    }
+    setBusy(true);
+    setMsg(null);
+    try {
+      await saveKey("custom", key.trim(), name);
+      setKey("");
+      setMsg(`wrote ${name} to ~/.era-fusion/.env (live)`);
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <>
+      <div className="setup-key-row">
+        <span className="setup-key-name">custom (any env var)</span>
+        <input
+          className="text-input setup-key-input"
+          placeholder="env var name, e.g. MY_LLM_API_KEY"
+          value={env}
+          onChange={(e) => setEnv(e.target.value)}
+        />
+        <input
+          type="password"
+          className="text-input setup-key-input"
+          placeholder="key value"
+          value={key}
+          onChange={(e) => setKey(e.target.value)}
+        />
+        <button
+          type="button"
+          className="btn-ghost"
+          disabled={busy}
+          onClick={() => void save()}
+        >
+          {busy ? "Saving…" : "Save"}
+        </button>
+      </div>
+      {msg && <p className="muted setup-note">{msg}</p>}
+    </>
   );
 }
 
@@ -200,6 +264,11 @@ function ModelsSection({
         webSearch: false,
         reasoningEffort: "high",
         autoPanel: false,
+        baseURL: "",
+        apiKeyEnv: "",
+        apiKeyHeader: "",
+        headersText: "",
+        extraParamsText: "",
       },
     ]);
   };
@@ -217,17 +286,36 @@ function ModelsSection({
     setBusy(true);
     setMsg(null);
     try {
-      const models: ConfigModel[] = rows.map((r) => ({
-        id: r.id.trim(),
-        provider: r.provider,
-        model: r.model?.trim() ? r.model.trim() : undefined,
-        label: r.label,
-        webSearch: r.webSearch,
-        costPer1MIn: r.costPer1MIn,
-        costPer1MOut: r.costPer1MOut,
-        excludeFromAuto: r.excludeFromAuto,
-        reasoningEffort: r.reasoningEffort ?? "high",
-      }));
+      const models: ConfigModel[] = rows.map((r) => {
+        let headers: Record<string, string> | undefined;
+        try {
+          headers = parseJsonObject(r.headersText) as Record<string, string> | undefined;
+        } catch {
+          throw new Error(`headers for "${r.id}" is not a JSON object`);
+        }
+        let extraParams: Record<string, unknown> | undefined;
+        try {
+          extraParams = parseJsonObject(r.extraParamsText);
+        } catch {
+          throw new Error(`params for "${r.id}" is not a JSON object`);
+        }
+        return {
+          id: r.id.trim(),
+          provider: r.provider,
+          model: r.model?.trim() ? r.model.trim() : undefined,
+          label: r.label,
+          webSearch: r.webSearch,
+          costPer1MIn: r.costPer1MIn,
+          costPer1MOut: r.costPer1MOut,
+          excludeFromAuto: r.excludeFromAuto,
+          reasoningEffort: r.reasoningEffort ?? "high",
+          baseURL: r.baseURL?.trim() ? r.baseURL.trim() : undefined,
+          apiKeyEnv: r.apiKeyEnv?.trim() ? r.apiKeyEnv.trim() : undefined,
+          apiKeyHeader: r.apiKeyHeader?.trim() ? r.apiKeyHeader.trim() : undefined,
+          headers,
+          extraParams,
+        };
+      });
       const autoPanel = rows
         .filter((r) => r.autoPanel)
         .map((r) => r.id.trim());
@@ -263,12 +351,17 @@ function ModelsSection({
               <th>id</th>
               <th>provider</th>
               <th>model</th>
+              <th>baseURL</th>
+              <th>key env</th>
+              <th>auth hdr</th>
               <th>label</th>
               <th>web</th>
               <th>effort</th>
               <th className="num">$/1M in</th>
               <th className="num">$/1M out</th>
               <th>auto</th>
+              <th>headers (JSON)</th>
+              <th>params (JSON)</th>
               <th />
             </tr>
           </thead>
@@ -290,7 +383,7 @@ function ModelsSection({
                       update(i, { provider: e.target.value })
                     }
                   >
-                    {PROVIDERS.map((p) => (
+                    {MODEL_PROVIDERS.map((p) => (
                       <option key={p} value={p}>
                         {p}
                       </option>
@@ -302,6 +395,30 @@ function ModelsSection({
                     className="text-input cell-input"
                     value={r.model ?? ""}
                     onChange={(e) => update(i, { model: e.target.value })}
+                  />
+                </td>
+                <td>
+                  <input
+                    className="text-input cell-input"
+                    placeholder="http://localhost:11434/v1"
+                    value={r.baseURL ?? ""}
+                    onChange={(e) => update(i, { baseURL: e.target.value })}
+                  />
+                </td>
+                <td>
+                  <input
+                    className="text-input cell-input"
+                    placeholder="BASETEN_API_KEY"
+                    value={r.apiKeyEnv ?? ""}
+                    onChange={(e) => update(i, { apiKeyEnv: e.target.value })}
+                  />
+                </td>
+                <td>
+                  <input
+                    className="text-input cell-input"
+                    placeholder="Authorization"
+                    value={r.apiKeyHeader ?? ""}
+                    onChange={(e) => update(i, { apiKeyHeader: e.target.value })}
                   />
                 </td>
                 <td>
@@ -364,6 +481,22 @@ function ModelsSection({
                     onChange={(e) =>
                       update(i, { autoPanel: e.target.checked })
                     }
+                  />
+                </td>
+                <td>
+                  <input
+                    className="text-input cell-input"
+                    placeholder='{ "X-Title": "app" }'
+                    value={r.headersText}
+                    onChange={(e) => update(i, { headersText: e.target.value })}
+                  />
+                </td>
+                <td>
+                  <input
+                    className="text-input cell-input"
+                    placeholder='{ "temperature": 0.2 }'
+                    value={r.extraParamsText}
+                    onChange={(e) => update(i, { extraParamsText: e.target.value })}
                   />
                 </td>
                 <td>
@@ -549,7 +682,21 @@ function SettingsSection({
 
 function toRows(config: FusionConfig): ModelRow[] {
   const auto = new Set(config.autoPanel);
-  return config.models.map((m) => ({ ...m, autoPanel: auto.has(m.id) }));
+  return config.models.map((m) => ({
+    ...m,
+    autoPanel: auto.has(m.id),
+    headersText: m.headers ? JSON.stringify(m.headers) : "",
+    extraParamsText: m.extraParams ? JSON.stringify(m.extraParams) : "",
+  }));
+}
+
+function parseJsonObject(text: string): Record<string, unknown> | undefined {
+  if (!text.trim()) return undefined;
+  const parsed: unknown = JSON.parse(text);
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    throw new Error("not a JSON object");
+  }
+  return parsed as Record<string, unknown>;
 }
 
 function parseNum(v: string): number | undefined {

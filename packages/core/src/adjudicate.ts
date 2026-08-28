@@ -4,7 +4,7 @@
  * dynamic — scaled to the scope of work inferred from the request.
  */
 import type { FusionConfig } from "./config.js";
-import { apiKeyFor, getModel } from "./config.js";
+import { apiKeyForModel, getModel } from "./config.js";
 import { getProvider } from "./providers/index.js";
 import type { ChatMessage, Depth } from "./types.js";
 
@@ -67,7 +67,7 @@ export async function adjudicate(
   };
 
   const spec = getModel(config, config.classifierModel);
-  if (!spec || !apiKeyFor(spec.provider)) return fallback;
+  if (!spec || !apiKeyForModel(spec)) return fallback;
 
   const provider = getProvider(spec.provider);
   const cats = config.categories.join(", ");

@@ -5,6 +5,7 @@ export {
   saveConfig,
   getModel,
   apiKeyFor,
+  apiKeyForModel,
   authModeFor,
   setProviderAuthMode,
   resolveTechniques,
@@ -45,3 +46,4 @@ export {
   OpenAIProvider,
   GoogleProvider,
 } from "./providers/index.js";
+export { OpenAICompatibleProvider, customEndpointHeaders } from "./providers/openai-compatible.js";

@@ -457,6 +457,19 @@ program
       }
     }
 
+    const customModels = config.models.filter((m) => m.provider === "openai-compatible");
+    if (customModels.length) {
+      log(chalk.bold("\nCustom providers (OpenAI-compatible)"));
+      for (const m of customModels) {
+        const keyEnv = m.apiKeyEnv ?? "BASETEN_API_KEY";
+        const ready = !!m.baseURL && !!process.env[keyEnv];
+        const detail = m.baseURL
+          ? `${m.baseURL} · key ${ready ? "set" : `missing (${keyEnv})`}`
+          : "no baseURL";
+        log(`  ${opt(ready)} ${m.id.padEnd(22)} ${chalk.dim(detail)}`);
+      }
+    }
+
     log(chalk.bold("\nOptional CLIs (subscription / fallback backend, no keys needed)"));
     log(`  ${opt(onPath("codex"))} codex   ${chalk.dim("(GPT panelist)")}`);
     log(`  ${opt(onPath("gemini"))} gemini  ${chalk.dim("(Gemini panelist)")}`);

@@ -148,7 +148,7 @@ export interface FuseRequest {
 
 // --- /api/config ---
 
-export type ProviderName = "anthropic" | "openai" | "google";
+export type ProviderName = "anthropic" | "openai" | "google" | "openai-compatible";
 
 export type ReasoningEffort = "low" | "medium" | "high" | "xhigh" | "max";
 
@@ -162,6 +162,11 @@ export interface ConfigModel {
   costPer1MOut?: number;
   excludeFromAuto?: boolean;
   reasoningEffort?: ReasoningEffort;
+  baseURL?: string;
+  apiKeyEnv?: string;
+  apiKeyHeader?: string;
+  headers?: Record<string, string>;
+  extraParams?: Record<string, unknown>;
 }
 
 export interface FusionConfig {

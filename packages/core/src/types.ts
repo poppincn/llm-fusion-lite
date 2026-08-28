@@ -63,6 +63,25 @@ export interface ModelSpec {
    */
   apiKeyEnv?: string;
   /**
+   * For provider "openai-compatible": the HTTP header that carries the API key.
+   * Default "Authorization" (value `Bearer <key>`). Any other name (e.g.
+   * "api-key", "X-Api-Key") sends the raw key — the convention for private /
+   * enterprise gateways.
+   */
+  apiKeyHeader?: string;
+  /**
+   * For provider "openai-compatible": extra static HTTP headers sent on every
+   * request (e.g. { "X-Title": "my-app" }). Never holds the API key — use
+   * `apiKeyEnv` + `apiKeyHeader` for that.
+   */
+  headers?: Record<string, string>;
+  /**
+   * For provider "openai-compatible": extra request body parameters passed
+   * through to the chat completions endpoint (e.g. { "temperature": 0.2 }).
+   * Engine-set fields (model/messages/max_tokens/stream) always win.
+   */
+  extraParams?: Record<string, unknown>;
+  /**
    * Reasoning effort for this model (default "high" when unset). Editable in the
    * dashboard's Models pane; honored by providers that expose an effort knob.
    */

@@ -93,6 +93,36 @@ fuse doctor    # each key ✓/○; "Readiness" should report ≥ 2 models for re
 fuse models    # ● available / ○ not, per model
 ```
 
+### 4b. Custom OpenAI-compatible endpoints (no official keys needed)
+
+No Anthropic / OpenAI / Google key? Any Chat Completions-compatible endpoint —
+local Ollama / vLLM, OpenRouter / DeepSeek / Qwen, or a private gateway — can
+join the panel via `provider: "openai-compatible"`. Add a model entry to
+`~/.era-fusion/config.json` (or the dashboard **Setup → Models**):
+
+```json
+{
+  "id": "llama-local",
+  "provider": "openai-compatible",
+  "model": "llama3.1",
+  "label": "Llama (local)",
+  "baseURL": "http://localhost:11434/v1",
+  "apiKeyEnv": "OLLAMA_API_KEY",
+  "apiKeyHeader": "Authorization",
+  "headers": {},
+  "extraParams": {}
+}
+```
+
+Fields: `baseURL` (required, no trailing slash) · `apiKeyEnv` (env var holding
+the key; default `BASETEN_API_KEY`) · `apiKeyHeader` (default `Authorization`
+→ `Bearer <key>`; any other name sends the raw key, e.g. `api-key` for private
+gateways) · `headers` (extra static HTTP headers) · `extraParams` (request-body
+passthrough like `temperature`). Keyless local endpoints (Ollama) ignore the
+auth header — give the env var any non-empty value. Set the key from the
+dashboard **Setup → Keys** "custom" row; verify with `fuse doctor` (which now
+lists custom providers) and `fuse doctor --probe`.
+
 ---
 
 ## 5. Make the model IDs match your access  ← do not skip

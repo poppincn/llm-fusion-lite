@@ -8,6 +8,7 @@ import {
   loadConfig,
   saveConfig,
   setProviderKey,
+  writeEnvVar,
   FusionStore,
   availableAutoPanel,
   configuredProviders,
@@ -261,12 +262,20 @@ export function createApp(opts: AppOptions = {}): Hono {
 
   // --- Set a provider API key (writes ~/.era-fusion/.env + live env) ---
   app.post("/api/keys", async (c) => {
-    const body = await c.req.json<{ provider: ProviderName; key: string }>();
-    const valid: ProviderName[] = ["anthropic", "openai", "google"];
-    if (!valid.includes(body.provider) || !body.key) {
-      return c.json({ error: "provider (anthropic|openai|google) and key required" }, 400);
+    const body = await c.req.json<{ provider: ProviderName | "custom"; env?: string; key: string }>();
+    if (!body.key) return c.json({ error: "key required" }, 400);
+    const known: ProviderName[] = ["anthropic", "openai", "google"];
+    if ((known as string[]).includes(body.provider)) {
+      setProviderKey(body.provider as ProviderName, body.key.trim());
+    } else if (body.provider === "custom") {
+      const env = String(body.env ?? "").trim();
+      if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(env)) {
+        return c.json({ error: "custom providers need a valid env var name" }, 400);
+      }
+      writeEnvVar(env, body.key.trim());
+    } else {
+      return c.json({ error: "provider must be anthropic|openai|google|custom" }, 400);
     }
-    setProviderKey(body.provider, body.key.trim());
     return c.json({ ok: true, providers: configuredProviders() });
   });
 

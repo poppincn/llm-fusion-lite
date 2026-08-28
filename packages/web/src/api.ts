@@ -217,13 +217,14 @@ export async function getUsage(): Promise<Usage> {
 }
 
 export async function saveKey(
-  provider: ProviderName,
+  provider: ProviderName | "custom",
   key: string,
+  env?: string,
 ): Promise<string[]> {
   const res = await fetch("/api/keys", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ provider, key }),
+    body: JSON.stringify({ provider, key, ...(env ? { env } : {}) }),
   });
   if (!res.ok) {
     let detail = "";

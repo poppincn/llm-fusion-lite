@@ -242,6 +242,14 @@ export function apiKeyFor(provider: ProviderName): string | undefined {
   }
 }
 
+/** API key for a specific model spec (per-model env for openai-compatible). */
+export function apiKeyForModel(spec: ModelSpec): string | undefined {
+  if (spec.provider === "openai-compatible") {
+    return process.env[spec.apiKeyEnv ?? "BASETEN_API_KEY"];
+  }
+  return apiKeyFor(spec.provider);
+}
+
 /** Resolve a provider's auth mode (defaults to "api" when unset). */
 export function authModeFor(
   provider: ProviderName,

@@ -103,6 +103,40 @@ Anthropic `output_config.effort`, OpenAI `reasoning.effort` (`xhigh`/`max` clamp
 (`claude-fable-5`, `gpt-5.6-sol`) may need a key with access — run `fuse doctor --probe`
 to confirm one answers before relying on it.
 
+### Custom OpenAI-compatible endpoints
+
+Any endpoint that speaks the OpenAI Chat Completions API — a local Ollama /
+vLLM server, OpenRouter / DeepSeek / Qwen, or a private enterprise gateway —
+can join the panel as a model with `provider: "openai-compatible"`. Add it in
+`~/.era-fusion/config.json` (or the dashboard's **Setup → Models** pane):
+
+```jsonc
+{
+  "id": "llama-local",
+  "provider": "openai-compatible",
+  "model": "llama3.1",
+  "label": "Llama (local)",
+  "baseURL": "http://localhost:11434/v1",  // no trailing slash
+  "apiKeyEnv": "OLLAMA_API_KEY",           // env var holding the key (default BASETEN_API_KEY)
+  "apiKeyHeader": "Authorization",         // auth header (default → `Bearer <key>`)
+  "headers": { "X-Title": "my-app" },      // optional extra HTTP headers
+  "extraParams": { "temperature": 0.2 }    // optional request-body passthrough
+}
+```
+
+- **Auth** — the key is sent as `Bearer <key>` in `Authorization` by default.
+  Set `apiKeyHeader` to any other name (e.g. `api-key`) to send the raw key —
+  the convention for private gateways. Set the env var via the dashboard's
+  **Setup → Keys** "custom" row, or `~/.era-fusion/.env`.
+- **Keyless local endpoints** (Ollama) — give the env var any non-empty value;
+  local servers ignore the auth header.
+- Add the model id to `autoPanel` to make it eligible for adaptive panel
+  selection. `fuse doctor` lists custom endpoints and `fuse doctor --probe`
+  live-checks them.
+- Custom endpoints have no hosted web search, so depth tiers collapse to a
+  single completion. `agentic` mode still works via the sandboxed
+  function-calling loop.
+
 ## Surfaces
 
 ### CLI
