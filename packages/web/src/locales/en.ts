@@ -10,7 +10,11 @@ export const en = {
     "nav.usage": "Usage",
     "nav.setup": "Setup",
     "banner.configError": "Could not load configuration: {error}",
-    "banner.noProviders": "No provider keys set — start the server with",
+    "banner.noProviders": "No providers configured yet.",
+    "banner.goSetup": "Add a provider",
+    "nav.language": "Language",
+    "lang.en": "English",
+    "lang.zh-CN": "简体中文",
 
     // chat
     "chat.emptyTitle": "Fuse the best of every model",
@@ -27,8 +31,8 @@ export const en = {
     "chat.tokensCost": "{tokens} tokens · ${cost}",
     "chat.web": "web",
     "chat.thanks": "Thanks for the feedback",
-    "chat.panelShow": "Show {n} panelist responses",
-    "chat.panelHide": "Hide {n} panelist responses",
+    "chat.panelShow": "Show {n} model responses",
+    "chat.panelHide": "Hide {n} model responses",
     "chat.voteUp": "Helpful",
     "chat.voteDown": "Not helpful",
 
@@ -43,7 +47,7 @@ export const en = {
     "panel.waiting": "Waiting for first token…",
     "panel.sourceOne": "{n} source",
     "panel.sources": "{n} sources",
-    "panel.tokensOut": "{provider} · {n} out tok",
+    "panel.tokensOut": "{provider} · {n} output tokens",
 
     // analysis
     "analysis.toggle": "How the answer was synthesized",
@@ -54,7 +58,7 @@ export const en = {
     "analysis.contributions": "Model contributions",
 
     // settings bar
-    "settings.button": "⚙ Settings",
+    "settings.button": "Settings",
     "settings.webSearch": "Web search",
     "settings.panelSize": "Panel size",
     "settings.judge": "Judge",
@@ -128,7 +132,7 @@ export const en = {
     "setup.colModel": "model",
     "setup.colBaseURL": "baseURL",
     "setup.colKeyEnv": "key env",
-    "setup.colAuthHeader": "auth hdr",
+    "setup.colAuthHeader": "auth header",
     "setup.colLabel": "label",
     "setup.colWeb": "web",
     "setup.colEffort": "effort",
@@ -165,14 +169,15 @@ export const en = {
     "setup.baseURLRequired": "Custom providers need a base URL.",
     "setup.keyEnv": "Key env var",
     "setup.key": "Key (optional)",
-    "setup.keyHint": "paste to write to the env var above — leave blank to keep the current value",
+    "setup.keyHint": "Paste to save into the env var above (blank keeps current)",
     "setup.keySet": "✓ key set",
-    "setup.keyMissing": "key not set",
+    "setup.keyMissing": "✗ key not set",
     "setup.authHeader": "Auth header",
     "setup.headers": "Headers (JSON)",
     "setup.params": "Extra params (JSON)",
     "setup.providerSaved": "Providers saved.",
     "setup.modelProviderRequired": "Every model needs a provider.",
-    "setup.customOnlyHint": "Only the custom adapter uses endpoint fields below.",
-    "setup.modelsCount": "{n} model(s)"
+    "setup.customOnlyHint": "The endpoint fields below apply to the custom adapter only.",
+    "setup.modelsOne": "{n} model",
+    "setup.modelsMany": "{n} models"
 } as const;

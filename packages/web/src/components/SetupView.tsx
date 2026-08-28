@@ -267,7 +267,11 @@ function ProvidersSection({ config, onSaved }: { config: FusionConfig; onSaved: 
                                 </span>
                             </div>
                             <div className="provider-card-foot">
-                                <span className="muted">{t("setup.modelsCount", { n: modelsFor(p.id) })}</span>
+                                <span className="muted">
+                                    {t(modelsFor(p.id) === 1 ? "setup.modelsOne" : "setup.modelsMany", {
+                                        n: modelsFor(p.id)
+                                    })}
+                                </span>
                                 <button type="button" className="btn-ghost btn-small" onClick={() => openEdit(p)}>
                                     {t("setup.edit")}
                                 </button>
@@ -510,7 +514,7 @@ function ModelsSection({ config, onSaved }: { config: FusionConfig; onSaved: () 
                     <thead>
                         <tr>
                             <th>{t("setup.colId")}</th>
-                            <th>{t("setup.providers")}</th>
+                            <th>{t("setup.colProvider")}</th>
                             <th>{t("setup.colModel")}</th>
                             <th>{t("setup.colLabel")}</th>
                             <th>{t("setup.colWeb")}</th>

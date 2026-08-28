@@ -31,7 +31,7 @@ export function App() {
         };
     }, []);
 
-    const noProviders = config !== null && config.providersConfigured.length === 0;
+    const noProviders = config !== null && config.providers.length === 0;
 
     const tabs: Array<{ id: Tab; label: string }> = [
         { id: "chat", label: t("nav.chat") },
@@ -74,8 +74,11 @@ export function App() {
                 <div className="banner banner-error">{t("banner.configError", { error: configError })}</div>
             )}
             {noProviders && (
-                <div className="banner banner-warn">
-                    {t("banner.noProviders")} <code>ANTHROPIC_API_KEY</code>.
+                <div className="banner banner-warn banner-row">
+                    <span>{t("banner.noProviders")}</span>
+                    <button type="button" className="btn-ghost btn-small" onClick={() => setTab("setup")}>
+                        {t("banner.goSetup")}
+                    </button>
                 </div>
             )}
 

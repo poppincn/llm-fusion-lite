@@ -9,10 +9,14 @@ export const zhCN = {
     "nav.usage": "用量",
     "nav.setup": "设置",
     "banner.configError": "无法加载配置：{error}",
-    "banner.noProviders": "尚未设置任何供应商密钥 — 请先配置",
+    "banner.noProviders": "还没有配置任何供应商。",
+    "banner.goSetup": "添加供应商",
+    "nav.language": "语言",
+    "lang.en": "English",
+    "lang.zh-CN": "简体中文",
 
     // chat
-    "chat.emptyTitle": "融合每个模型的最优解",
+    "chat.emptyTitle": "集各家模型之所长",
     "chat.emptyBody":
         "你的提问会并行分发给一组模型，由裁判模型综合出唯一最优答案；系统会持续学习每个模型在各主题上的专长。",
     "chat.stop": "停止",
@@ -53,7 +57,7 @@ export const zhCN = {
     "analysis.contributions": "各模型贡献",
 
     // settings bar
-    "settings.button": "⚙ 设置",
+    "settings.button": "设置",
     "settings.webSearch": "联网搜索",
     "settings.panelSize": "模型组规模",
     "settings.judge": "裁判",
@@ -110,7 +114,7 @@ export const zhCN = {
     "setup.modelIdsUnique": "模型 id 必须唯一。",
     "setup.headersInvalid": "“{id}” 的 headers 不是合法的 JSON 对象",
     "setup.paramsInvalid": "“{id}” 的 params 不是合法的 JSON 对象",
-    "setup.settings": "设置",
+    "setup.settings": "偏好设置",
     "setup.defaultJudge": "默认裁判",
     "setup.classifier": "分类模型",
     "setup.panelSize": "模型组规模",
@@ -164,14 +168,15 @@ export const zhCN = {
     "setup.baseURLRequired": "自定义供应商需要填写 Base URL。",
     "setup.keyEnv": "Key 环境变量",
     "setup.key": "Key（可选）",
-    "setup.keyHint": "粘贴后写入上方环境变量——留空则保持现有值",
-    "setup.keySet": "✓ 已配置",
-    "setup.keyMissing": "未配置",
+    "setup.keyHint": "粘贴后保存到上方环境变量（留空则不变）",
+    "setup.keySet": "✓ 已设置",
+    "setup.keyMissing": "✗ 未设置",
     "setup.authHeader": "认证头",
     "setup.headers": "Headers（JSON）",
     "setup.params": "附加参数（JSON）",
     "setup.providerSaved": "供应商已保存。",
     "setup.modelProviderRequired": "每个模型都需要选择一个供应商。",
     "setup.customOnlyHint": "以下端点字段仅对自定义适配器生效。",
-    "setup.modelsCount": "{n} 个模型"
+    "setup.modelsOne": "{n} 个模型",
+    "setup.modelsMany": "{n} 个模型"
 } as const;

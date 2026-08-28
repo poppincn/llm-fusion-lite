@@ -74,19 +74,19 @@ export function useT(): I18nValue {
 
 /** Compact language switcher; hidden until a second locale is registered. */
 export function LanguageSwitcher() {
-    const { locale, setLocale } = useT();
+    const { locale, setLocale, t } = useT();
     const locales = Object.keys(dictionaries) as Locale[];
     if (locales.length < 2) return null;
     return (
         <select
             className="select-input lang-switcher"
             value={locale}
-            aria-label="Language"
+            aria-label={t("nav.language")}
             onChange={e => setLocale(e.target.value as Locale)}
         >
             {locales.map(l => (
                 <option key={l} value={l}>
-                    {l}
+                    {t(`lang.${l}`)}
                 </option>
             ))}
         </select>
