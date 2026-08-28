@@ -7,8 +7,9 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { en } from "./locales/en";
+import { zhCN } from "./locales/zh-CN";
 
-export const dictionaries = { en } as const;
+export const dictionaries = { en, "zh-CN": zhCN } as const;
 export type Locale = keyof typeof dictionaries;
 
 const STORAGE_KEY = "llm-fusion-lite.lang";
@@ -20,6 +21,8 @@ function detectLocale(): Locale {
     } catch {
         /* ignore */
     }
+    const nav = navigator.language?.toLowerCase() ?? "";
+    if (nav.startsWith("zh")) return "zh-CN";
     return "en";
 }
 
