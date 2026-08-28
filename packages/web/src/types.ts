@@ -151,7 +151,6 @@ export interface ProviderDef {
     id: string;
     name: string;
     adapter: ProviderName;
-    apiKeyEnv?: string;
     baseURL?: string;
     apiKeyHeader?: string;
     headers?: Record<string, string>;
@@ -174,13 +173,31 @@ export interface ConfigModel {
     excludeFromAuto?: boolean;
     reasoningEffort?: ReasoningEffort;
     baseURL?: string;
-    apiKeyEnv?: string;
     apiKeyHeader?: string;
     headers?: Record<string, string>;
     extraParams?: Record<string, unknown>;
 }
 
+export interface GatewayConfig {
+    /** Effective public OpenAI-compatible base URL. */
+    baseURL: string;
+    /** True when baseURL is inferred from the current browser origin. */
+    baseURLAuto: boolean;
+    model: string;
+    apiKeySet: boolean;
+    apiKeyHint?: string;
+}
+
+export interface GatewayUpdate {
+    /** Empty resets the public URL to automatic detection. */
+    baseURL?: string;
+    model?: string;
+    /** Empty disables gateway authentication. */
+    apiKey?: string;
+}
+
 export interface FusionConfig {
+    gateway: GatewayConfig;
     providers: ProviderDef[];
     models: ConfigModel[];
     autoPanel: string[];
@@ -196,6 +213,7 @@ export interface FusionConfig {
 
 /** Partial config accepted by PUT /api/config. */
 export interface ConfigUpdate {
+    gateway?: GatewayUpdate;
     providers?: ProviderDef[];
     models?: ConfigModel[];
     autoPanel?: string[];

@@ -35,3 +35,21 @@ test("apiKeyForModel honors per-model env for openai-compatible", () => {
         delete process.env.MY_LLM_KEY;
     }
 });
+
+test("apiKeyForModel honors per-instance env for official adapters", () => {
+    process.env.OPENAI_TEAM_KEY = "team-key";
+    try {
+        assert.equal(
+            apiKeyForModel({
+                id: "gpt",
+                provider: "openai",
+                model: "gpt-x",
+                label: "GPT",
+                apiKeyEnv: "OPENAI_TEAM_KEY"
+            }),
+            "team-key"
+        );
+    } finally {
+        delete process.env.OPENAI_TEAM_KEY;
+    }
+});

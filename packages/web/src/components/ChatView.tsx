@@ -63,9 +63,14 @@ export function ChatView({ config }: Props) {
     // Initialize settings once config arrives.
     useEffect(() => {
         if (config && settings === null) {
+            const availableModels = config.models.filter(model => config.available.includes(model.id));
+            const judgeModels = availableModels.length > 0 ? availableModels : config.models;
             setSettings({
                 webSearch: config.webSearch,
-                judge: config.defaultJudge,
+                judge:
+                    judgeModels.some(model => model.id === config.defaultJudge) ?
+                        config.defaultJudge
+                    :   (judgeModels[0]?.id ?? ""),
                 panelSize: config.panelSize,
                 panel: []
             });

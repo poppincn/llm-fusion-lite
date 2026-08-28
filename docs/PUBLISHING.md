@@ -11,6 +11,8 @@ npm run pack:release        # → ./release  (bundled dist + public/ + skills/ +
 (cd release && npm pack --dry-run)   # inspect tarball contents
 ```
 
+The build command is cross-platform and runs on Windows, macOS, and Linux without Bash or WSL.
+
 `release/` is git-ignored build output. The bundle inlines all `@llm-fusion-lite/*` workspace code; only the provider SDKs + runtime libs are external deps (declared in `release/package.json`). No native deps (built-in `node:sqlite`). Requires **Node ≥ 22** on the consumer.
 
 ## Publish to public npm

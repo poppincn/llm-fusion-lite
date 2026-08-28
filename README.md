@@ -1,252 +1,292 @@
 <div align="center">
 
-# ⚡ LLM Fusion Lite
+# LLM Fusion Lite
 
-**Lightweight multi-model fusion with adaptive, learned model strengths.**
+**Run several LLMs in parallel, synthesize one answer, and expose the result as one OpenAI-compatible model.**
 
-Dispatch one prompt to a panel of frontier models in parallel, then have an
-influence-weighted judge synthesize a single best answer — and watch it learn
-which model is the de-facto expert on each subject over time.
-
-[![npm](https://img.shields.io/npm/v/llm-fusion-lite?color=cb3837&logo=npm)](https://www.npmjs.com/package/llm-fusion-lite)
-[![license](https://img.shields.io/badge/license-MIT-blue)](./LICENSE)
-[![node](https://img.shields.io/badge/node-%E2%89%A522-339933?logo=node.js&logoColor=white)](https://nodejs.org)
-[![CI](https://github.com/Alexander-Ollman/llm-fusion/actions/workflows/ci.yml/badge.svg)](https://github.com/Alexander-Ollman/llm-fusion/actions/workflows/ci.yml)
-
-**Graphical chat UI · CLI · OpenAI-compatible endpoint · `/fuse` skill for agentic coding tools**
+[简体中文](README.zh-CN.md) · [License](LICENSE) · [Agentic mode](docs/AGENTIC_FUSION.md) · [MCP](docs/MCP.md)
 
 </div>
 
----
+> LLM Fusion Lite is a lightweight fork of [llm-fusion](https://github.com/Alexander-Ollman/llm-fusion) ("Era Fusion", © Alexander Ollman, MIT). It keeps the parallel panel, two-phase judge, learned per-subject strengths, CLI, web UI, MCP server, and `/fuse` skill.
 
-> **LLM Fusion Lite** is a lightweight fork of
-> [llm-fusion](https://github.com/Alexander-Ollman/llm-fusion) ("Era Fusion",
-> © Alexander Ollman, MIT). It keeps the full fusion pipeline — parallel panel,
-> two-phase judge, adaptive per-subject learning — while staying lean: no native
-> dependencies, one bundled package, and the same engine across CLI, web UI,
-> MCP, and the `/fuse` skill.
+## What you get
 
-Inspired by [OpenRouter's "Fusion beats Frontier"](https://openrouter.ai/blog/announcements/fusion-beats-frontier/)
-and the [`fusion-fable`](https://github.com/duolahypercho/fusion-fable) skill, with one big
-addition: **it learns which model is the de-facto subject-matter expert over time** and
-weights the synthesis accordingly.
+- **One fused model for your Agent** — OpenAI-compatible `POST /v1/chat/completions`.
+- **Flexible providers** — Anthropic, OpenAI, Google, or any Chat Completions-compatible service such as Volcengine Ark, OpenRouter, Ollama, vLLM, DeepSeek, or Qwen.
+- **Web configuration** — providers, models, judge, panel size, gateway model name, public Base URL, and optional gateway API key.
+- **Hot updates** — gateway Base URL, model name, and API key apply to new requests immediately.
+- **Stable pages** — `/`, `/strengths/`, `/usage/`, `/connect/`, and `/setup/` can be refreshed or linked directly.
+- **Adaptive learning** — model contribution and feedback gradually influence future panel selection.
 
-Diversity is **harvested, not manufactured** — the same prompt to different models yields
-different reasoning paths, tool calls, and sources. No synthetic personas.
+## Status
 
-## How it works
+The `llm-fusion-lite` npm package is **not published yet**. Install from source using the steps below. The repository requires **Node.js 22 or newer**; Node.js 24+ is recommended.
 
-```
-request
-  │
-  ├─▶ adjudicate ──────────  subject (category) + dynamic depth (light · standard · deep)
-  │
-  ├─▶ select panel ────────  N distinct models, chosen by learned per-subject strength
-  │                          (ε-greedy exploration keeps trying under-used models)
-  │
-  ├─▶ dispatch in parallel  each model answers the SAME prompt independently
-  │                          (depth scales tools: none → web search → agentic loop
-  │                           with web search + web fetch + sandboxed code execution)
-  │
-  ├─▶ judge (2 phase) ─────  A) structured comparison: consensus · contradictions ·
-  │                             gaps · unique insights · per-model INFLUENCE score,
-  │                             informed by learned subject expertise as a soft prior
-  │                          B) streamed final answer, grounded in the analysis
-  │
-  └─▶ learn ───────────────  influence scores accumulate into per-model, per-subject
-                             expertise (SME) → feeds future panel selection + judging.
-                             Optional 👍/👎 feedback refines it further.
-```
+## End-to-end quick start
 
-## Quick start
+### 1. Clone and build
 
 ```bash
-npm install -g llm-fusion-lite                     # Node ≥ 22
-fusion-lite setup                                  # guided wizard: keys + defaults + /fuse skill
-fusion-lite "What's the best way to design an idempotent webhook consumer?"
+git clone https://github.com/jamcaaxian/llm-fusion.git
+cd llm-fusion
+npm install
+npm run build
 ```
 
-Prefer to run from source?
+Optional on macOS/Linux: install the local launchers and `/fuse` skill.
 
 ```bash
-git clone https://github.com/jamcaaxian/llm-fusion && cd llm-fusion
-./scripts/install.sh     # installs deps, builds, puts `fusion-lite`/`fusion-lite-run` on PATH, installs the skill
-fusion-lite setup
-fusion-lite doctor       # verify environment
+./scripts/install.sh
 ```
 
-> Works out-of-the-box with **just an Anthropic key** (Opus 4.8 + Sonnet 4.6, judged by
-> Opus 4.8). Add OpenAI / Google keys for true cross-provider fusion. Run
-> `fusion-lite doctor --probe` to confirm a model actually answers before relying on it.
+On Windows, or without installing launchers, use `npm run fusion-lite --` before CLI arguments:
 
-### Configuring providers
+```powershell
+npm run fusion-lite -- doctor
+```
 
-`fusion-lite setup` is the quickest path — a terminal wizard that, **per provider
-(Anthropic / OpenAI / Google), lets you choose an auth mode**:
+### 2. Start the web UI
 
-| Mode                   | What it does                                                                                                                                                                                   |
-| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **API key**            | The provider's official SDK with a key (masked entry, written to `~/.llm-fusion-lite/.env`, mode `0600`).                                                                                      |
-| **Subscription login** | Calls the provider's CLI (`claude` / `codex` / `gemini`) as a subprocess using your logged-in Pro/Max plan — **no API key**. The wizard installs/updates the CLI and prints the login command. |
-| **Skip**               | Leave that provider unconfigured.                                                                                                                                                              |
+```bash
+npm run start --workspace=@llm-fusion-lite/server
+```
 
-Both modes feed the full engine (panel selection, two-phase judge, adaptive learning).
-Prefer env vars? `export ANTHROPIC_API_KEY=…` (at least one; OpenAI / Google optional).
-Re-run `fusion-lite setup` anytime to change a mode; `fusion-lite setup --skill-only` just (re)installs
-the skill.
+Open:
 
-> **Subscription-mode limits:** CLI panelists report no token usage, so cost shows
-> **$0/unmetered**. CLIs are also less reliable at strict JSON — keep the judge on an
-> api/Anthropic model when you can.
+- Setup: <http://localhost:8787/setup/>
+- Connect your Agent: <http://localhost:8787/connect/>
+- Chat: <http://localhost:8787/>
 
-### Models & reasoning effort
+To use another port:
 
-The registry ships with **Claude Fable 5** (Anthropic's most capable) and **GPT-5.6
-(Sol)** alongside the Opus / Sonnet / GPT-5.5 / Gemini panelists. Each model has an
-editable **reasoning effort** (`low · medium · high · xhigh · max`, default `high`) in
-the dashboard's **Setup → Models** pane. Effort maps to each provider's native control —
-Anthropic `output_config.effort`, OpenAI `reasoning.effort` (`xhigh`/`max` clamp to
-`high`); providers without an effort knob ignore it. Newer default model ids
-(`claude-fable-5`, `gpt-5.6-sol`) may need a key with access — run `fuse doctor --probe`
-to confirm one answers before relying on it.
+```powershell
+$env:LLM_FUSION_LITE_PORT = "9000"
+npm run start --workspace=@llm-fusion-lite/server
+```
 
-### Custom OpenAI-compatible endpoints
+```bash
+LLM_FUSION_LITE_PORT=9000 npm run start --workspace=@llm-fusion-lite/server
+```
 
-Any endpoint that speaks the OpenAI Chat Completions API — a local Ollama /
-vLLM server, OpenRouter / DeepSeek / Qwen, or a private enterprise gateway —
-can join the panel as a model with `provider: "openai-compatible"`. Add it in
-`~/.llm-fusion-lite/config.json` (or the dashboard's **Setup → Models** pane):
+### 3. Add a provider
 
-```jsonc
+Open **Setup → Providers → Add Provider**.
+
+#### Official provider
+
+Choose Anthropic, OpenAI, or Google, then enter:
+
+1. **Name** — any label, such as `OpenAI Production`.
+2. **id** — a stable internal slug, such as `openai-prod`.
+3. **Adapter** — the official provider.
+4. **Key** — optional when editing; blank keeps the current key.
+
+#### Custom OpenAI-compatible provider
+
+Use this for Volcengine Ark, OpenRouter, Ollama, vLLM, private gateways, and similar services:
+
+1. **Name** — for example `Volcengine`.
+2. **id** — for example `volcengine`.
+3. **Adapter** — `Custom · ChatCompletion`.
+4. **Key** — the upstream provider key. For a keyless local endpoint, enter any non-empty placeholder so credential preflight can mark it ready.
+5. **Base URL** — the upstream OpenAI-compatible API root, for example `https://ark.cn-beijing.volces.com/api/v3` or `http://localhost:11434/v1`.
+6. **Auth header** — normally `Authorization`.
+7. **Headers / Extra params** — optional JSON objects.
+
+The provider key is stored on the server in `~/.llm-fusion-lite/.env`. It is not sent to the browser after saving.
+
+### 4. Add models
+
+Open **Setup → Models** and add at least one row:
+
+| Field    | Meaning                                                                |
+| -------- | ---------------------------------------------------------------------- |
+| `id`     | Stable internal model id used by the panel and learned-strength store. |
+| provider | The provider instance created in the previous step.                    |
+| model    | The exact upstream model or endpoint id.                               |
+| label    | Display name. If blank, Fusion falls back to `model`, then `id`.       |
+| web      | Whether the model may use provider-native web search.                  |
+| effort   | Provider reasoning effort when supported.                              |
+| auto     | Include the model in adaptive panel selection.                         |
+
+Then open **Setup → Settings**:
+
+- Select an existing **Default judge**.
+- Select an existing **Classifier model**.
+- Set **Panel size** no larger than the number of usable models.
+- Save settings.
+
+For useful fusion, configure at least two models. One model still works, but provides no cross-model diversity.
+
+### 5. Test Fusion in the browser
+
+Open <http://localhost:8787/>. Expand **Settings** to verify that model names appear in both the explicit panel and Judge menus, then send a prompt.
+
+CLI smoke test from source:
+
+```bash
+npm run fusion-lite -- "Compare optimistic and pessimistic locking"
+```
+
+After running `./scripts/install.sh`, the shorter command is available:
+
+```bash
+fusion-lite "Compare optimistic and pessimistic locking"
+```
+
+### 6. Configure the external Agent gateway
+
+Open <http://localhost:8787/connect/> and set:
+
+- **Base URL** — leave blank to publish `http://localhost:8787/v1`, or enter the public reverse-proxy URL.
+- **Model name** — the single model name your Agent will request; default `fusion`.
+- **API Key** — optional. Blank means no gateway authentication. A non-empty value protects `/v1` immediately.
+
+The page shows copy-ready environment variables and JSON. A typical Agent configuration is:
+
+```text
+Base URL: http://localhost:8787/v1
+API Key:  not-required
+Model:    fusion
+```
+
+If you configure a gateway API key:
+
+```text
+Base URL: http://localhost:8787/v1
+API Key:  YOUR_FUSION_API_KEY
+Model:    fusion
+```
+
+Equivalent environment variables:
+
+```bash
+OPENAI_BASE_URL=http://localhost:8787/v1
+OPENAI_API_KEY=YOUR_FUSION_API_KEY
+OPENAI_MODEL=fusion
+```
+
+Generic JSON:
+
+```json
+{ "baseURL": "http://localhost:8787/v1", "apiKey": "YOUR_FUSION_API_KEY", "model": "fusion" }
+```
+
+If your Agent runs inside Docker, use:
+
+```text
+http://host.docker.internal:8787/v1
+```
+
+The gateway key accepts either `Authorization: Bearer <key>` or `X-API-Key: <key>`. It protects `/v1` only; keep the dashboard and `/api` on a trusted network or restrict them at your reverse proxy. Use HTTPS for remote access.
+
+### 7. Verify with curl
+
+No gateway API key:
+
+```bash
+curl http://localhost:8787/v1/models
+```
+
+With a gateway API key:
+
+```bash
+curl http://localhost:8787/v1/models \
+  -H "Authorization: Bearer YOUR_FUSION_API_KEY"
+```
+
+Chat Completions:
+
+```bash
+curl http://localhost:8787/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_FUSION_API_KEY" \
+  -d '{"model":"fusion","messages":[{"role":"user","content":"Explain CRDTs briefly"}]}'
+```
+
+Omit the authorization header when gateway authentication is disabled.
+
+## Other integration modes
+
+### MCP
+
+Build first, then point an MCP client at the local server executable:
+
+```json
 {
-    "id": "llama-local",
-    "provider": "openai-compatible",
-    "model": "llama3.1",
-    "label": "Llama (local)",
-    "baseURL": "http://localhost:11434/v1", // no trailing slash
-    "apiKeyEnv": "OLLAMA_API_KEY", // env var holding the key (default BASETEN_API_KEY)
-    "apiKeyHeader": "Authorization", // auth header (default → `Bearer <key>`)
-    "headers": { "X-Title": "my-app" }, // optional extra HTTP headers
-    "extraParams": { "temperature": 0.2 } // optional request-body passthrough
+    "mcpServers": {
+        "llm-fusion-lite": { "command": "node", "args": ["C:/path/to/llm-fusion/packages/cli/dist/mcp.js"] }
+    }
 }
 ```
 
-- **Auth** — the key is sent as `Bearer <key>` in `Authorization` by default.
-  Set `apiKeyHeader` to any other name (e.g. `api-key`) to send the raw key —
-  the convention for private gateways. Set the env var via the dashboard's
-  **Setup → Keys** "custom" row, or `~/.llm-fusion-lite/.env`.
-- **Keyless local endpoints** (Ollama) — give the env var any non-empty value;
-  local servers ignore the auth header.
-- Add the model id to `autoPanel` to make it eligible for adaptive panel
-  selection. `fuse doctor` lists custom endpoints and `fuse doctor --probe`
-  live-checks them.
-- Custom endpoints have no hosted web search, so depth tiers collapse to a
-  single completion. `agentic` mode still works via the sandboxed
-  function-calling loop.
+See [docs/MCP.md](docs/MCP.md).
 
-## Surfaces
+### `/fuse` skill
 
-### CLI
+On macOS/Linux, `./scripts/install.sh` copies the skill to Claude Code and OpenCode. You can then run:
+
+```text
+/fuse Compare these two architectures
+```
+
+## Configuration and data
+
+Default state directory: `~/.llm-fusion-lite/`
+
+| File          | Purpose                                                                                     |
+| ------------- | ------------------------------------------------------------------------------------------- |
+| `config.json` | Providers, models, judge, panel settings, and external gateway configuration.               |
+| `.env`        | Upstream provider keys. Treat as secret.                                                    |
+| `fusion.db`   | Runs, learned model strengths, usage, and feedback. Treat prompts and answers as sensitive. |
+
+Override the directory with `LLM_FUSION_LITE_HOME`.
+
+The external gateway API key is stored only as a salted digest in `config.json`; the original plaintext is not recoverable from the UI.
+
+## Troubleshooting
+
+### The Judge menu or model panel is empty
+
+- Confirm **Setup → Models** contains models.
+- Ensure the model rows reference an existing provider.
+- Save the Models section, then refresh Chat.
+- Blank labels automatically fall back to the upstream model name or id.
+
+### No models are available
+
+- Check that the upstream provider key is set.
+- For custom endpoints, verify the Base URL and exact upstream model id.
+- Run `npm run fusion-lite -- doctor` and `npm run fusion-lite -- models`.
+
+### `npm install -g llm-fusion-lite` returns 404
+
+The package is not published yet. Use the source installation steps in this README.
+
+### Port 8787 is already in use
+
+Stop the existing process or set `LLM_FUSION_LITE_PORT` before starting the server.
+
+### Agent receives 401
+
+The gateway API key is enabled. Copy the current value you chose into your Agent and send it as a Bearer token. The UI intentionally shows only a masked hint after saving.
+
+## Development
 
 ```bash
-fusion-lite "explain CRDTs like I'm a backend engineer"
-echo "summarize this" | fusion-lite --quiet                # pipe-friendly, answer-only on stdout
-fusion-lite --panel claude-opus-4-8,gpt-5.5,gemini-3-pro "compare these approaches"
-fusion-lite --depth deep "research the current state of X" # force agentic deep panelists
-fusion-lite stats coding                                  # learned per-subject strengths
-fusion-lite feedback <run-id> up                          # teach it which answers were good
+npm run build
+npm test
+npm run format
 ```
 
-Full command set: `serve`, `setup`, `stats`, `usage`, `feedback`, `doctor`, `config`, `models`.
+Workspace packages:
 
-### Web UI
-
-```bash
-fusion-lite serve      # → http://localhost:8787  (chat · strengths · usage · setup)
-```
-
-Live panel view, streamed synthesis, an analysis panel, 👍/👎 feedback, and a
-learned-strengths dashboard. Dev mode: `npm run dev:server && npm run dev:web` (Vite
-proxies `/api` + `/v1`).
-
-### As a model (OpenAI-compatible)
-
-Point any OpenAI-compatible client (Claude Code / OpenCode / Cursor) at the server and
-use the model id `fusion`:
-
-```
-base URL:  http://localhost:8787/v1
-model:     fusion
-```
-
-Every request fans out to the panel and returns one synthesized answer. Non-standard body
-fields `panel`, `judge`, `panel_size`, `web_search` are honored. Each call feeds the
-adaptive store.
-
-### As a skill in Claude Code / OpenCode
-
-```
-/fuse <your request>
-```
-
-…or just say _"run this through fusion."_ The skill is **service-first with CLI fallback**:
-with provider keys it runs the full engine (and learns); without keys — or if the engine
-can't authenticate — it orchestrates the `claude` / `codex` / `gemini` CLIs directly, **in
-parallel**, so fusion works even before any keys are set.
-
-A **credential preflight** runs before any model call: fusion never dispatches to a provider
-without usable credentials. Uncredentialed or unauthenticated models are skipped up front
-with a clear reason (an explicit `--panel` is strict and stops if any selected model is
-missing credentials); a blank request is rejected without spending inference. Check what's
-ready with `fusion-lite doctor` (add `--probe` to verify each CLI is actually logged in).
-
-## Adaptive learning
-
-Every run, the judge assigns each panelist an **influence** score (how much it drove the
-final answer). Those accumulate per `(model, subject)` into a quantitative expertise
-profile, viewable with `fuse stats` or the web dashboard. Selection uses it to field the
-strongest panel per subject; the judge uses it as a soft prior. Optional 👍/👎 feedback
-nudges scores further. Data lives in `~/.llm-fusion-lite/fusion.db`.
-
-## Packages
-
-| Package                   | What it is                                                                                                                                                                |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `@llm-fusion-lite/core`   | The engine: provider abstraction (Anthropic / OpenAI / Google SDKs), adjudicator, panel dispatch, two-phase judge, SQLite adaptive store (`node:sqlite`, no native deps). |
-| `@llm-fusion-lite/server` | Hono server: OpenAI-compatible `/v1/chat/completions`, rich SSE `/api/fuse`, feedback + strengths API, serves the web UI.                                                 |
-| `@llm-fusion-lite/cli`    | `fusion-lite` — run fusions, `serve`, `setup`, `stats`, `usage`, `feedback`, `doctor`, `config`, `models`. Pipe-friendly.                                                 |
-| `@llm-fusion-lite/web`    | React chat UI: live panel view, streamed synthesis, analysis panel, feedback, learned-strengths dashboard.                                                                |
-| `skills/fuse`             | The `/fuse` skill for Claude Code / OpenCode (service-first, CLI fallback).                                                                                               |
-
-## Requirements
-
-- **Node ≥ 22.** The adaptive store uses the built-in `node:sqlite` (no native deps). It is
-  stable on Node 24+; on Node 22 it is available but emits an experimental warning.
-- **Provider keys** — at least one of `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` /
-  `GOOGLE_API_KEY`, or a logged-in provider CLI for subscription mode.
-- **Docker** _(optional)_ — only for the agentic **deep** tier's sandboxed code execution.
-  Fusion degrades gracefully without it.
-
-## Documentation
-
-- [`docs/ENGINEER_ONBOARDING.md`](docs/ENGINEER_ONBOARDING.md) — first-time setup + connecting provider keys
-- [`docs/AGENTIC_FUSION.md`](docs/AGENTIC_FUSION.md) — the sandboxed agentic-panelist tier
-- [`docs/MCP.md`](docs/MCP.md) — LLM Fusion Lite as an MCP tool for any agentic stack
-- [`docs/PUBLISHING.md`](docs/PUBLISHING.md) — publishing the npm package + integration recipe
-- [`docs/fusion-flow.html`](docs/fusion-flow.html) — visual pipeline explainer
-
-## Roadmap
-
-- **Multi-scope decomposition** — split a request into sub-scopes, each with its own
-  cross-model panel, then meta-aggregate (data model already structured for it).
-- **Derived personas** — promote consistently dominant models into named subject experts.
-- Per-model cost/latency budgeting and richer dashboards.
-
-## Contributing
-
-Issues and PRs welcome. CI runs a typecheck + build on Node 22 and 24 — keep both green.
-Local check before pushing: `npm run build` (compiles every workspace with `tsc`).
+- `@llm-fusion-lite/core` — fusion engine, providers, judge, adaptive store.
+- `@llm-fusion-lite/server` — Hono HTTP server and OpenAI-compatible gateway.
+- `@llm-fusion-lite/cli` — CLI, setup wizard, MCP server.
+- `@llm-fusion-lite/web` — React multi-page dashboard.
 
 ## License
 
-[MIT](./LICENSE) — fork of llm-fusion (Era Fusion), © Alexander Ollman
+[MIT](LICENSE) — fork of llm-fusion (Era Fusion), © Alexander Ollman.

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import type { ConfigModel, FusionConfig, ProviderDef, ProviderName, ReasoningEffort } from "../types";
-import { getConfig, saveKey, updateConfig } from "../api";
+import { getConfig, saveProviderKey, updateConfig } from "../api";
 import { useT } from "../i18n";
 
 interface Props {
@@ -14,13 +14,6 @@ const ADAPTERS: Array<{ value: ProviderName; labelKey: string }> = [
     { value: "openai-compatible", labelKey: "setup.adapterCustom" }
 ];
 const EFFORTS: ReasoningEffort[] = ["low", "medium", "high", "xhigh", "max"];
-
-const DEFAULT_KEY_ENV: Record<ProviderName, string> = {
-    "anthropic": "ANTHROPIC_API_KEY",
-    "openai": "OPENAI_API_KEY",
-    "google": "GOOGLE_API_KEY",
-    "openai-compatible": "BASETEN_API_KEY"
-};
 
 interface ModelRow {
     id: string;
@@ -86,7 +79,6 @@ interface ProviderDraft {
     id: string;
     name: string;
     adapter: ProviderName;
-    apiKeyEnv: string;
     keyText: string;
     baseURL: string;
     apiKeyHeader: string;
@@ -99,7 +91,6 @@ function blankProvider(): ProviderDraft {
         id: "",
         name: "",
         adapter: "openai",
-        apiKeyEnv: "",
         keyText: "",
         baseURL: "",
         apiKeyHeader: "",
@@ -113,7 +104,6 @@ function draftFrom(def: ProviderDef): ProviderDraft {
         id: def.id,
         name: def.name,
         adapter: def.adapter,
-        apiKeyEnv: def.apiKeyEnv ?? "",
         keyText: "",
         baseURL: def.baseURL ?? "",
         apiKeyHeader: def.apiKeyHeader ?? "",
@@ -185,11 +175,11 @@ function ProvidersSection({ config, onSaved }: { config: FusionConfig; onSaved: 
         }
         setBusy(true);
         try {
+            const keyText = draft.keyText.trim();
             const def: ProviderDef = {
                 id,
                 name,
                 adapter: draft.adapter,
-                apiKeyEnv: draft.apiKeyEnv.trim() || undefined,
                 baseURL: draft.baseURL.trim() || undefined,
                 apiKeyHeader: draft.apiKeyHeader.trim() || undefined,
                 headers,
@@ -197,15 +187,8 @@ function ProvidersSection({ config, onSaved }: { config: FusionConfig; onSaved: 
             };
             const next = isNew ? [...providers, def] : providers.map(p => (p.id === def.id ? def : p));
             await updateConfig({ providers: next });
-            const keyText = draft.keyText.trim();
             if (keyText) {
-                if (def.adapter === "openai-compatible") {
-                    await saveKey("custom", keyText, def.apiKeyEnv ?? DEFAULT_KEY_ENV["openai-compatible"]);
-                } else if (def.apiKeyEnv) {
-                    await saveKey("custom", keyText, def.apiKeyEnv);
-                } else {
-                    await saveKey(def.adapter, keyText);
-                }
+                await saveProviderKey(id, keyText);
             }
             setDraft(null);
             onSaved();
@@ -261,7 +244,7 @@ function ProvidersSection({ config, onSaved }: { config: FusionConfig; onSaved: 
                             <div className="provider-card-detail muted">
                                 {p.adapter === "openai-compatible" ?
                                     p.baseURL || t("setup.baseURLRequired")
-                                :   `${t("setup.keyEnv")}: ${p.apiKeyEnv ?? DEFAULT_KEY_ENV[p.adapter]}`}{" "}
+                                :   t("setup.officialAdapter")}{" "}
                                 <span className={p.keySet ? "setup-status-ok" : "setup-status-off"}>
                                     {p.keySet ? t("setup.keySet") : t("setup.keyMissing")}
                                 </span>
@@ -336,15 +319,6 @@ function ProvidersSection({ config, onSaved }: { config: FusionConfig; onSaved: 
                                         </option>
                                     ))}
                                 </select>
-                            </label>
-                            <label className="field">
-                                <span className="field-label">{t("setup.keyEnv")}</span>
-                                <input
-                                    className="text-input"
-                                    value={draft.apiKeyEnv}
-                                    placeholder={DEFAULT_KEY_ENV[draft.adapter]}
-                                    onChange={e => setDraft({ ...draft, apiKeyEnv: e.target.value })}
-                                />
                             </label>
                             <label className="field">
                                 <span className="field-label">{t("setup.key")}</span>
@@ -483,7 +457,7 @@ function ModelsSection({ config, onSaved }: { config: FusionConfig; onSaved: () 
                 providerId: r.providerId,
                 provider: byId.get(r.providerId)?.adapter ?? "openai-compatible",
                 model: r.model?.trim() ? r.model.trim() : undefined,
-                label: r.label,
+                label: r.label.trim() || r.model.trim() || r.id.trim(),
                 webSearch: r.webSearch,
                 costPer1MIn: r.costPer1MIn,
                 costPer1MOut: r.costPer1MOut,
@@ -749,7 +723,7 @@ function toRows(config: FusionConfig): ModelRow[] {
         id: m.id,
         providerId: providerIdOf(m),
         model: m.model ?? "",
-        label: m.label,
+        label: m.label?.trim() || m.model?.trim() || m.id,
         webSearch: m.webSearch ?? false,
         reasoningEffort: m.reasoningEffort ?? "high",
         costPer1MIn: m.costPer1MIn,

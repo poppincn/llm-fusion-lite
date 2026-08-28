@@ -198,11 +198,11 @@ export async function getUsage(): Promise<Usage> {
     return (await res.json()) as Usage;
 }
 
-export async function saveKey(provider: ProviderName | "custom", key: string, env?: string): Promise<string[]> {
+export async function saveProviderKey(providerId: string, key: string): Promise<FusionConfig> {
     const res = await fetch("/api/keys", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ provider, key, ...(env ? { env } : {}) })
+        body: JSON.stringify({ providerId, key })
     });
     if (!res.ok) {
         let detail = "";
@@ -213,6 +213,6 @@ export async function saveKey(provider: ProviderName | "custom", key: string, en
         }
         throw new Error(`Save key failed (${res.status})${detail ? `: ${detail}` : ""}`);
     }
-    const json = (await res.json()) as { ok: true; providers: string[] };
-    return json.providers ?? [];
+    const json = (await res.json()) as { ok: true; config: FusionConfig };
+    return json.config;
 }

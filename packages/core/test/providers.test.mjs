@@ -98,3 +98,31 @@ test("model-level fields act as fallback when the provider lacks them", () => {
     });
     assert.equal(cfg.models[0].baseURL, "http://fb/v1");
 });
+
+test("blank model labels fall back to the provider-native model name", () => {
+    const cfg = materializeConfig({
+        ...baseConfig,
+        providers: [{ id: "custom", name: "Custom", adapter: "openai-compatible" }],
+        models: [
+            {
+                id: "display-id",
+                provider: "openai-compatible",
+                providerId: "custom",
+                model: "provider-model-name",
+                label: "   "
+            }
+        ]
+    });
+    assert.equal(cfg.models[0].label, "provider-model-name");
+});
+
+test("missing judge and classifier ids fall back to an existing model", () => {
+    const cfg = materializeConfig({
+        ...baseConfig,
+        defaultJudge: "deleted-judge",
+        classifierModel: "deleted-classifier",
+        providers: []
+    });
+    assert.equal(cfg.defaultJudge, "m1");
+    assert.equal(cfg.classifierModel, "m1");
+});

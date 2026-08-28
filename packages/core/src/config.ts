@@ -2,7 +2,15 @@
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import type { Depth, ModelSpec, ProviderAuthMode, ProviderDef, ProviderName, TechniqueConfig } from "./types.js";
+import type {
+    Depth,
+    GatewayConfig,
+    ModelSpec,
+    ProviderAuthMode,
+    ProviderDef,
+    ProviderName,
+    TechniqueConfig
+} from "./types.js";
 
 /** Base pipeline only: fan-out → synthesize. No extra techniques. */
 export const TECHNIQUES_OFF: TechniqueConfig = {
@@ -51,6 +59,8 @@ export interface FusionConfig {
      * one default instance per built-in adapter is synthesized at load.
      */
     providers?: ProviderDef[];
+    /** OpenAI-compatible gateway exposed to external agents. */
+    gateway?: GatewayConfig;
     /** Default optional techniques (when depth doesn't dictate otherwise). */
     techniques?: TechniqueConfig;
 }
@@ -87,6 +97,8 @@ export const DEFAULT_PROVIDERS: ProviderDef[] = [
     { id: "google", name: "Google", adapter: "google" },
     { id: "custom", name: "Custom (ChatCompletion)", adapter: "openai-compatible", apiKeyEnv: "BASETEN_API_KEY" }
 ];
+
+export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = { baseURL: "", model: "fusion" };
 
 /**
  * Default registry. Anthropic models work with just ANTHROPIC_API_KEY.
@@ -174,7 +186,8 @@ export const DEFAULT_CONFIG: FusionConfig = {
     explorationRate: 0.15,
     categories: DEFAULT_CATEGORIES,
     providerAuth: {},
-    providers: DEFAULT_PROVIDERS
+    providers: DEFAULT_PROVIDERS,
+    gateway: DEFAULT_GATEWAY_CONFIG
 };
 
 export function fusionHome(): string {
@@ -210,7 +223,11 @@ export function loadConfig(force = false): FusionConfig {
     }
     try {
         const raw = JSON.parse(readFileSync(path, "utf8")) as Partial<FusionConfig>;
-        const merged: FusionConfig = { ...DEFAULT_CONFIG, ...raw };
+        const merged: FusionConfig = {
+            ...DEFAULT_CONFIG,
+            ...raw,
+            gateway: { ...DEFAULT_GATEWAY_CONFIG, ...(raw.gateway ?? {}) }
+        };
         if (!raw.models) merged.models = DEFAULT_MODELS;
         // Legacy configs predate provider instances — synthesize defaults only
         // when the field is ABSENT. An explicit empty array is user intent
@@ -259,10 +276,12 @@ export function materializeConfig(config: FusionConfig): FusionConfig {
     const byAdapter = (adapter: ProviderName) => providers.find(p => p.adapter === adapter);
 
     const models = config.models.map(m => {
+        const label = m.label?.trim() || m.model?.trim() || m.id;
         const def = (m.providerId && byId.get(m.providerId)) || byAdapter(m.provider);
-        if (!def) return m;
+        if (!def) return { ...m, label };
         return {
             ...m,
+            label,
             provider: def.adapter,
             providerId: m.providerId ?? def.id,
             baseURL: def.baseURL ?? m.baseURL,
@@ -272,7 +291,11 @@ export function materializeConfig(config: FusionConfig): FusionConfig {
             extraParams: def.extraParams ?? m.extraParams
         };
     });
-    return { ...config, providers, models };
+    const modelIds = new Set(models.map(model => model.id));
+    const fallbackModelId = models[0]?.id ?? "";
+    const defaultJudge = modelIds.has(config.defaultJudge) ? config.defaultJudge : fallbackModelId;
+    const classifierModel = modelIds.has(config.classifierModel) ? config.classifierModel : defaultJudge;
+    return { ...config, providers, models, defaultJudge, classifierModel };
 }
 
 export function saveConfig(config: FusionConfig): void {
@@ -303,9 +326,8 @@ export function apiKeyFor(provider: ProviderName): string | undefined {
 /** API key for a specific model spec (per-model env for openai-compatible). */
 export function apiKeyForModel(spec?: ModelSpec): string | undefined {
     if (!spec) return undefined;
-    if (spec.provider === "openai-compatible") {
-        return process.env[spec.apiKeyEnv ?? "BASETEN_API_KEY"];
-    }
+    if (spec.apiKeyEnv) return process.env[spec.apiKeyEnv];
+    if (spec.provider === "openai-compatible") return process.env.BASETEN_API_KEY;
     return apiKeyFor(spec.provider);
 }
 

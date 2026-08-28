@@ -17,6 +17,7 @@ export {
     DEFAULT_CONFIG,
     DEFAULT_MODELS,
     DEFAULT_PROVIDERS,
+    DEFAULT_GATEWAY_CONFIG,
     DEFAULT_CATEGORIES
 } from "./config.js";
 export type { FusionConfig } from "./config.js";

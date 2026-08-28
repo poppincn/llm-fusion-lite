@@ -19,9 +19,9 @@
         "dev:server": "npm run dev --workspace=@llm-fusion-lite/server",
         "dev:web": "npm run dev --workspace=@llm-fusion-lite/web",
         "fusion-lite": "node packages/cli/dist/index.js",
-        "pack:release": "bash scripts/build-package.sh",
+        "pack:release": "node scripts/build-package.mjs",
         "bench": "node scripts/bench/run.mjs",
-        "test": "npm run build:core && node --test \"packages/core/test/*.test.mjs\"",
+        "test": "npm run build && node --test \"packages/core/test/*.test.mjs\" \"packages/server/test/*.test.mjs\"",
         "format": "prettier --write .",
         "typecheck": "npm run build"
     },

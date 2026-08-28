@@ -16,6 +16,7 @@ mkdir -p release/public release/skills
 cp -R packages/web/dist/* release/public/
 cp -R skills/* release/skills/
 cp README.md release/README.md 2>/dev/null || true
+cp README.zh-CN.md release/README.zh-CN.md 2>/dev/null || true
 chmod +x release/skills/fuse/scripts/fuse-run.sh
 
 echo "==> Generating release/package.json…"

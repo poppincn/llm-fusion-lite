@@ -29,7 +29,7 @@ const release = {
         "fusion-lite-run": "dist/fusion-lite-run.js",
         "fusion-lite-mcp": "dist/fusion-lite-mcp.js"
     },
-    files: ["dist", "public", "skills", "README.md"],
+    files: ["dist", "public", "skills", "README.md", "README.zh-CN.md"],
     engines: { node: ">=22" },
     dependencies: Object.fromEntries(Object.entries(dependencies).sort()),
     // Public package on the npm registry, unscoped.

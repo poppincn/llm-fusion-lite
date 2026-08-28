@@ -119,6 +119,18 @@ export interface ProviderDef {
     extraParams?: Record<string, unknown>;
 }
 
+/** Public OpenAI-compatible gateway settings exposed to external agents. */
+export interface GatewayConfig {
+    /** Advertised OpenAI-compatible base URL. Empty means infer it from the current request. */
+    baseURL?: string;
+    /** Model id external OpenAI-compatible clients must request. */
+    model: string;
+    /** Salted digest of the optional gateway API key. The plaintext is never persisted. */
+    apiKeyHash?: string;
+    /** Non-secret suffix shown in the dashboard so users can identify the configured key. */
+    apiKeyHint?: string;
+}
+
 export interface Citation {
     url: string;
     title?: string;

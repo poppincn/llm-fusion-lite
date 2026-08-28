@@ -3,15 +3,33 @@ import type { FusionConfig } from "./types";
 import { getConfig } from "./api";
 import { LanguageSwitcher, useT } from "./i18n";
 import { ChatView } from "./components/ChatView";
+import { ConnectView } from "./components/ConnectView";
 import { StrengthsView } from "./components/StrengthsView";
 import { UsageView } from "./components/UsageView";
 import { SetupView } from "./components/SetupView";
 
-type Tab = "chat" | "strengths" | "usage" | "setup";
+type Page = "chat" | "strengths" | "usage" | "connect" | "setup";
+
+const PAGE_PATH: Record<Page, string> = {
+    chat: "/",
+    strengths: "/strengths/",
+    usage: "/usage/",
+    connect: "/connect/",
+    setup: "/setup/"
+};
+
+function pageFromPath(pathname: string): Page {
+    const normalized = pathname === "/" ? "/" : pathname.replace(/\/+$/, "");
+    if (normalized === "/" || normalized === "/chat") return "chat";
+    const match = (Object.entries(PAGE_PATH) as Array<[Page, string]>).find(
+        ([, path]) => path.replace(/\/+$/, "") === normalized
+    );
+    return match?.[0] ?? "chat";
+}
 
 export function App() {
     const { t } = useT();
-    const [tab, setTab] = useState<Tab>("chat");
+    const page = pageFromPath(window.location.pathname);
     const [config, setConfig] = useState<FusionConfig | null>(null);
     const [configError, setConfigError] = useState<string | null>(null);
 
@@ -33,10 +51,11 @@ export function App() {
 
     const noProviders = config !== null && config.providers.length === 0;
 
-    const tabs: Array<{ id: Tab; label: string }> = [
+    const pages: Array<{ id: Page; label: string }> = [
         { id: "chat", label: t("nav.chat") },
         { id: "strengths", label: t("nav.strengths") },
         { id: "usage", label: t("nav.usage") },
+        { id: "connect", label: t("nav.connect") },
         { id: "setup", label: t("nav.setup") }
     ];
 
@@ -52,18 +71,16 @@ export function App() {
                     </span>
                 </div>
                 <div className="header-right">
-                    <nav className="tabs" role="tablist" aria-label="Primary">
-                        {tabs.map(({ id, label }) => (
-                            <button
+                    <nav className="tabs" aria-label={t("nav.primary")}>
+                        {pages.map(({ id, label }) => (
+                            <a
                                 key={id}
-                                type="button"
-                                role="tab"
-                                aria-selected={tab === id}
-                                className={`tab ${tab === id ? "tab-active" : ""}`}
-                                onClick={() => setTab(id)}
+                                href={PAGE_PATH[id]}
+                                aria-current={page === id ? "page" : undefined}
+                                className={`tab ${page === id ? "tab-active" : ""}`}
                             >
                                 {label}
-                            </button>
+                            </a>
                         ))}
                     </nav>
                     <LanguageSwitcher />
@@ -76,17 +93,18 @@ export function App() {
             {noProviders && (
                 <div className="banner banner-warn banner-row">
                     <span>{t("banner.noProviders")}</span>
-                    <button type="button" className="btn-ghost btn-small" onClick={() => setTab("setup")}>
+                    <a className="btn-ghost btn-small" href={PAGE_PATH.setup}>
                         {t("banner.goSetup")}
-                    </button>
+                    </a>
                 </div>
             )}
 
             <main className="app-main">
-                {tab === "chat" && <ChatView config={config} />}
-                {tab === "strengths" && <StrengthsView config={config} />}
-                {tab === "usage" && <UsageView />}
-                {tab === "setup" && <SetupView onConfigChange={setConfig} />}
+                {page === "chat" && <ChatView config={config} />}
+                {page === "strengths" && <StrengthsView config={config} />}
+                {page === "usage" && <UsageView />}
+                {page === "connect" && <ConnectView config={config} onConfigChange={setConfig} />}
+                {page === "setup" && <SetupView onConfigChange={setConfig} />}
             </main>
         </div>
     );

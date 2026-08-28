@@ -1,17 +1,18 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { streamSSE } from "hono/streaming";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
 import { join, normalize, extname } from "node:path";
 import {
     fuse,
     loadConfig,
     saveConfig,
-    setProviderKey,
     writeEnvVar,
     FusionStore,
     availableAutoPanel,
     configuredProviders,
+    DEFAULT_GATEWAY_CONFIG,
     type ChatMessage,
     type FusionConfig,
     type FusionEvent,
@@ -31,6 +32,14 @@ interface OpenAIMessage {
     role: string;
     content: string | Array<{ type?: string; text?: string }>;
 }
+
+interface GatewayUpdate {
+    baseURL?: string;
+    model?: string;
+    apiKey?: string;
+}
+
+type ConfigUpdateBody = Omit<Partial<FusionConfig>, "gateway"> & { gateway?: GatewayUpdate };
 
 function normalizeMessages(messages: OpenAIMessage[]): ChatMessage[] {
     return messages.map(m => {
@@ -62,9 +71,21 @@ export function createApp(opts: AppOptions = {}): Hono {
     const app = new Hono();
     const store = opts.store ?? new FusionStore();
     app.use("/api/*", cors());
-    app.use("/v1/*", cors());
+    app.use("/v1/*", cors({ allowHeaders: ["Content-Type", "Authorization", "X-API-Key"] }));
+    app.use("/v1/*", async (c, next) => {
+        if (c.req.method === "OPTIONS") return next();
+        const apiKeyHash = loadConfig().gateway?.apiKeyHash;
+        if (!apiKeyHash) return next();
+        const apiKey = requestApiKey(c.req.header("Authorization"), c.req.header("X-API-Key"));
+        if (apiKey && verifyGatewayApiKey(apiKey, apiKeyHash)) return next();
+        c.header("WWW-Authenticate", 'Bearer realm="LLM Fusion Lite"');
+        return c.json(
+            { error: { message: "Invalid or missing API key", type: "authentication_error", code: "invalid_api_key" } },
+            401
+        );
+    });
 
-    function configResponse() {
+    function configResponse(requestURL: string) {
         const config = loadConfig();
         // Provider instances own endpoint/credential config — strip those fields
         // from models (the engine re-merges them at load) so the dashboard edits
@@ -82,8 +103,15 @@ export function createApp(opts: AppOptions = {}): Hono {
             :   m
         );
         return {
+            gateway: publicGatewayConfig(config, requestURL),
             providers: (config.providers ?? []).map(p => ({
-                ...p,
+                id: p.id,
+                name: p.name,
+                adapter: p.adapter,
+                baseURL: p.baseURL,
+                apiKeyHeader: p.apiKeyHeader,
+                headers: p.headers,
+                extraParams: p.extraParams,
                 keySet: !!process.env[p.apiKeyEnv ?? DEFAULT_KEY_ENV[p.adapter]]
             })),
             models,
@@ -106,10 +134,8 @@ export function createApp(opts: AppOptions = {}): Hono {
     // --- OpenAI-compatible model list ---
     app.get("/v1/models", c => {
         const config = loadConfig();
-        const data = [
-            { id: "fusion", object: "model", owned_by: "llm-fusion-lite" },
-            ...config.models.map(m => ({ id: m.id, object: "model", owned_by: m.provider }))
-        ];
+        const model = config.gateway?.model || DEFAULT_GATEWAY_CONFIG.model;
+        const data = [{ id: model, object: "model", owned_by: "llm-fusion-lite" }];
         return c.json({ object: "list", data });
     });
 
@@ -124,9 +150,22 @@ export function createApp(opts: AppOptions = {}): Hono {
             panel_size?: number;
             web_search?: boolean;
         }>();
+        const gatewayModel = loadConfig().gateway?.model || DEFAULT_GATEWAY_CONFIG.model;
+        const modelName = body.model || gatewayModel;
+        if (modelName !== gatewayModel) {
+            return c.json(
+                {
+                    error: {
+                        message: `The model '${modelName}' does not exist`,
+                        type: "invalid_request_error",
+                        code: "model_not_found"
+                    }
+                },
+                404
+            );
+        }
         const messages = normalizeMessages(body.messages ?? []);
         const created = Math.floor(Date.now() / 1000);
-        const modelName = body.model || "fusion";
 
         const fuseOpts = {
             prompt: messages,
@@ -250,14 +289,20 @@ export function createApp(opts: AppOptions = {}): Hono {
         return c.json({ runs: store.recentRuns(limit) });
     });
 
-    app.get("/api/config", c => c.json(configResponse()));
+    app.get("/api/config", c => c.json(configResponse(c.req.url)));
 
     // --- Edit settings + model registry (dashboard "Setup") ---
     app.put("/api/config", async c => {
-        const body = await c.req.json<Partial<FusionConfig>>();
+        const body = await c.req.json<ConfigUpdateBody>();
         const config = loadConfig();
         const next: FusionConfig = { ...config };
-        if (Array.isArray(body.providers)) next.providers = body.providers as ProviderDef[];
+        if (Array.isArray(body.providers)) {
+            const currentProviders = new Map((config.providers ?? []).map(provider => [provider.id, provider]));
+            next.providers = (body.providers as ProviderDef[]).map(provider => ({
+                ...provider,
+                apiKeyEnv: currentProviders.get(provider.id)?.apiKeyEnv
+            }));
+        }
         if (Array.isArray(body.models)) next.models = body.models as ModelSpec[];
         if (Array.isArray(body.autoPanel)) next.autoPanel = body.autoPanel;
         if (Array.isArray(body.categories)) next.categories = body.categories;
@@ -266,27 +311,51 @@ export function createApp(opts: AppOptions = {}): Hono {
         if (typeof body.panelSize === "number") next.panelSize = body.panelSize;
         if (typeof body.webSearch === "boolean") next.webSearch = body.webSearch;
         if (typeof body.explorationRate === "number") next.explorationRate = body.explorationRate;
+        if (body.gateway) {
+            const current = { ...DEFAULT_GATEWAY_CONFIG, ...(config.gateway ?? {}) };
+            const gateway = { ...current };
+            if (typeof body.gateway.baseURL === "string") {
+                const baseURL = normalizeGatewayBaseURL(body.gateway.baseURL);
+                if (baseURL instanceof Error) return c.json({ error: baseURL.message }, 400);
+                gateway.baseURL = baseURL;
+            }
+            if (typeof body.gateway.model === "string") {
+                const model = body.gateway.model.trim();
+                if (!model || model.length > 128) {
+                    return c.json({ error: "gateway model must be 1-128 characters" }, 400);
+                }
+                gateway.model = model;
+            }
+            if (typeof body.gateway.apiKey === "string") {
+                const apiKey = body.gateway.apiKey.trim();
+                if (apiKey) {
+                    gateway.apiKeyHash = hashGatewayApiKey(apiKey);
+                    gateway.apiKeyHint = `••••${apiKey.slice(-4)}`;
+                } else {
+                    delete gateway.apiKeyHash;
+                    delete gateway.apiKeyHint;
+                }
+            }
+            next.gateway = gateway;
+        }
         saveConfig(next);
-        return c.json({ ok: true, config: configResponse() });
+        return c.json({ ok: true, config: configResponse(c.req.url) });
     });
 
-    // --- Set a provider API key (writes ~/.llm-fusion-lite/.env + live env) ---
+    // --- Set a provider API key (internal env name, never exposed to the browser) ---
     app.post("/api/keys", async c => {
-        const body = await c.req.json<{ provider: ProviderName | "custom"; env?: string; key: string }>();
+        const body = await c.req.json<{ providerId: string; key: string }>();
         if (!body.key) return c.json({ error: "key required" }, 400);
-        const known: ProviderName[] = ["anthropic", "openai", "google"];
-        if ((known as string[]).includes(body.provider)) {
-            setProviderKey(body.provider as ProviderName, body.key.trim());
-        } else if (body.provider === "custom") {
-            const env = String(body.env ?? "").trim();
-            if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(env)) {
-                return c.json({ error: "custom providers need a valid env var name" }, 400);
-            }
-            writeEnvVar(env, body.key.trim());
-        } else {
-            return c.json({ error: "provider must be anthropic|openai|google|custom" }, 400);
-        }
-        return c.json({ ok: true, providers: configuredProviders() });
+        const config = loadConfig();
+        const provider = config.providers?.find(item => item.id === body.providerId);
+        if (!provider) return c.json({ error: "provider not found" }, 404);
+        const apiKeyEnv = provider.apiKeyEnv ?? internalProviderKeyEnv(provider.id);
+        writeEnvVar(apiKeyEnv, body.key.trim());
+        saveConfig({
+            ...config,
+            providers: config.providers?.map(item => (item.id === provider.id ? { ...item, apiKeyEnv } : item))
+        });
+        return c.json({ ok: true, config: configResponse(c.req.url) });
     });
 
     // --- Provider/model usage totals (dashboard "Usage") ---
@@ -316,6 +385,56 @@ const DEFAULT_KEY_ENV: Record<ProviderName, string> = {
     "openai-compatible": "BASETEN_API_KEY"
 };
 
+function internalProviderKeyEnv(providerId: string): string {
+    const normalized = providerId.toUpperCase().replace(/[^A-Z0-9_]/g, "_");
+    return `LLM_FUSION_LITE_PROVIDER_${normalized}_API_KEY`;
+}
+
+function publicGatewayConfig(config: FusionConfig, requestURL: string) {
+    const gateway = { ...DEFAULT_GATEWAY_CONFIG, ...(config.gateway ?? {}) };
+    const configuredBaseURL = gateway.baseURL?.trim() ?? "";
+    return {
+        baseURL: configuredBaseURL || `${new URL(requestURL).origin}/v1`,
+        baseURLAuto: !configuredBaseURL,
+        model: gateway.model,
+        apiKeySet: Boolean(gateway.apiKeyHash),
+        apiKeyHint: gateway.apiKeyHint
+    };
+}
+
+function normalizeGatewayBaseURL(value: string): string | Error {
+    const trimmed = value.trim().replace(/\/+$/, "");
+    if (!trimmed) return "";
+    try {
+        const url = new URL(trimmed);
+        if (url.protocol !== "http:" && url.protocol !== "https:") {
+            return new Error("gateway baseURL must use http or https");
+        }
+        return url.toString().replace(/\/+$/, "");
+    } catch {
+        return new Error("gateway baseURL must be a valid URL");
+    }
+}
+
+function hashGatewayApiKey(apiKey: string): string {
+    const salt = randomBytes(16).toString("hex");
+    const digest = createHash("sha256").update(`${salt}:${apiKey}`).digest("hex");
+    return `sha256:${salt}:${digest}`;
+}
+
+function verifyGatewayApiKey(apiKey: string, encoded: string): boolean {
+    const [scheme, salt, expectedHex] = encoded.split(":");
+    if (scheme !== "sha256" || !salt || !expectedHex) return false;
+    const actual = Buffer.from(createHash("sha256").update(`${salt}:${apiKey}`).digest("hex"));
+    const expected = Buffer.from(expectedHex);
+    return actual.length === expected.length && timingSafeEqual(actual, expected);
+}
+
+function requestApiKey(authorization?: string, headerKey?: string): string | undefined {
+    const bearer = authorization?.match(/^Bearer\s+(.+)$/i)?.[1]?.trim();
+    return bearer || headerKey?.trim() || undefined;
+}
+
 const MIME: Record<string, string> = {
     ".html": "text/html",
     ".js": "text/javascript",
@@ -328,8 +447,14 @@ const MIME: Record<string, string> = {
 };
 
 async function serveFile(root: string, reqPath: string): Promise<{ body: Buffer; type: string } | null> {
-    const rel = normalize(decodeURIComponent(reqPath)).replace(/^(\.\.[/\\])+/, "");
-    const full = join(root, rel === "/" ? "/index.html" : rel);
+    const rel = normalize(decodeURIComponent(reqPath))
+        .replace(/^(\.\.[/\\])+/, "")
+        .replace(/^[/\\]+/, "");
+    const pagePath =
+        !rel || rel === "." ? "index.html"
+        : reqPath.endsWith("/") ? join(rel, "index.html")
+        : rel;
+    const full = join(root, pagePath);
     if (!full.startsWith(root)) return null;
     try {
         const s = await stat(full);

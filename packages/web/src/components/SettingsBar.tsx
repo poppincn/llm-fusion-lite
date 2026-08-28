@@ -24,6 +24,8 @@ export function SettingsBar({ config, settings, onChange, disabled }: Props) {
     const models = config?.models ?? [];
     const available = config?.available ?? [];
     const availableModels = models.filter(m => available.includes(m.id));
+    const judgeModels = availableModels.length > 0 ? availableModels : models;
+    const providerNames = new Map((config?.providers ?? []).map(provider => [provider.id, provider.name]));
 
     const togglePanelMember = (id: string) => {
         const next = settings.panel.includes(id) ? settings.panel.filter(p => p !== id) : [...settings.panel, id];
@@ -65,13 +67,13 @@ export function SettingsBar({ config, settings, onChange, disabled }: Props) {
                     <select
                         className="select-input"
                         value={settings.judge}
-                        disabled={disabled || models.length === 0}
+                        disabled={disabled || judgeModels.length === 0}
                         onChange={e => onChange({ ...settings, judge: e.target.value })}
                     >
-                        {models.length === 0 && <option value="">{t("settings.defaultOption")}</option>}
-                        {models.map(m => (
+                        {judgeModels.length === 0 && <option value="">{t("settings.defaultOption")}</option>}
+                        {judgeModels.map(m => (
                             <option key={m.id} value={m.id}>
-                                {m.label}
+                                {modelDisplayName(m)}
                             </option>
                         ))}
                     </select>
@@ -94,8 +96,13 @@ export function SettingsBar({ config, settings, onChange, disabled }: Props) {
                                         disabled={disabled}
                                         onChange={() => togglePanelMember(m.id)}
                                     />
-                                    <span>{m.label}</span>
-                                    <span className="provider-tag">{m.provider}</span>
+                                    <span className="panel-check-copy">
+                                        <span className="panel-check-name">{modelDisplayName(m)}</span>
+                                        {modelSubtitle(m) && <span className="panel-check-id">{modelSubtitle(m)}</span>}
+                                    </span>
+                                    <span className="provider-tag">
+                                        {(m.providerId && providerNames.get(m.providerId)) || m.provider}
+                                    </span>
                                 </label>
                             ))}
                         </div>
@@ -104,6 +111,15 @@ export function SettingsBar({ config, settings, onChange, disabled }: Props) {
             )}
         </div>
     );
+}
+
+function modelDisplayName(model: FusionConfig["models"][number]): string {
+    return model.label?.trim() || model.model?.trim() || model.id;
+}
+
+function modelSubtitle(model: FusionConfig["models"][number]): string | null {
+    const subtitle = model.model?.trim() || model.id;
+    return subtitle === modelDisplayName(model) ? null : subtitle;
 }
 
 function clampInt(raw: string, min: number, max: number): number {
